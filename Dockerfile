@@ -349,9 +349,9 @@ RUN if [ -z "$JAVA_HOME" ]; then \
         fi; \
     fi && \
     if [ "$BUILD_TYPE" = "release" ]; then \
-        ./gradlew assembleRelease; \
+        ./gradlew assembleRelease --stacktrace 2>&1 || (echo "BUILD FAILED" && cat app/build/reports/*.log 2>/dev/null || true); \
     else \
-        ./gradlew assembleDebug; \
+        ./gradlew assembleDebug --stacktrace 2>&1 || (echo "BUILD FAILED" && cat app/build/reports/*.log 2>/dev/null || true); \
     fi
 
 CMD ["/bin/bash", "-c", "echo 'Build complete.' && sleep infinity"]
