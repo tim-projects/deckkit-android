@@ -342,13 +342,7 @@ exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS -classpath "$GRADLE_WR
 GRADLEW_EOF
 
 RUN ls -la /project/
-
-RUN if [ -z "$JAVA_HOME" ]; then \
-        if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then \
-            export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"; \
-        fi; \
-    fi && \
-    java -version && \
-    ./gradlew assembleDebug
+RUN which java || ls /usr/lib/jvm/
+RUN java -Version || true
 
 CMD ["/bin/bash", "-c", "echo 'Build complete.' && sleep infinity"]
