@@ -48,40 +48,51 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:buildx-stable-1
 
-      - name: Set up secrets
+      - name: Set up keystore
         if: ${{ github.event.inputs.build_type == 'release' }}
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-        shell: bash
 
       - name: Build Docker image
         if: ${{ github.event.inputs.build_type == 'release' }}
-        run: |
-          docker build \
-            --build-arg WEBSITE_URL="${{ github.event.inputs.url }}" \
-            --build-arg APP_NAME="${{ github.event.inputs.app_name }}" \
-            --build-arg PACKAGE_NAME="${{ github.event.inputs.package_name }}" \
-            --build-arg FAVICON_URL="${{ github.event.inputs.favicon_url }}" \
-            --build-arg BUILD_TYPE="${{ github.event.inputs.build_type }}" \
-            --secret id=keystore,src=keystore.jks \
-            --build-arg KEYSTORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD }}" \
-            --build-arg KEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
-            --build-arg KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}" \
-            -t webview-builder \
-            .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: webview-builder
+          build-args: |
+            WEBSITE_URL=${{ github.event.inputs.url }}
+            APP_NAME=${{ github.event.inputs.app_name }}
+            PACKAGE_NAME=${{ github.event.inputs.package_name }}
+            FAVICON_URL=${{ github.event.inputs.favicon_url }}
+            BUILD_TYPE=${{ github.event.inputs.build_type }}
+            KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+            KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+            KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build Docker image (debug)
         if: ${{ github.event.inputs.build_type == 'debug' }}
-        run: |
-          docker build \
-            --build-arg WEBSITE_URL="${{ github.event.inputs.url }}" \
-            --build-arg APP_NAME="${{ github.event.inputs.app_name }}" \
-            --build-arg PACKAGE_NAME="${{ github.event.inputs.package_name }}" \
-            --build-arg FAVICON_URL="${{ github.event.inputs.favicon_url }}" \
-            --build-arg BUILD_TYPE="${{ github.event.inputs.build_type }}" \
-            -t webview-builder \
-            .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: webview-builder
+          build-args: |
+            WEBSITE_URL=${{ github.event.inputs.url }}
+            APP_NAME=${{ github.event.inputs.app_name }}
+            PACKAGE_NAME=${{ github.event.inputs.package_name }}
+            FAVICON_URL=${{ github.event.inputs.favicon_url }}
+            BUILD_TYPE=${{ github.event.inputs.build_type }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Extract APK from container
         run: |

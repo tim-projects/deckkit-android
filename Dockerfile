@@ -5,15 +5,12 @@ ARG APP_NAME
 ARG PACKAGE_NAME
 ARG FAVICON_URL
 ARG BUILD_TYPE=release
-ARG KEYSTORE_PASSWORD
-ARG KEY_ALIAS
-ARG KEY_PASSWORD
 
 WORKDIR /project
 
 RUN sudo apt-get update && sudo apt-get install -y wget imagemagick
 
-COPY keystore.jks /project/keystore.jks
+COPY --chmod=600 keystore.jks /project/keystore.jks 2>/dev/null || true
 
 RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
     mkdir -p app/src/main/java/${PACKAGE_PATH} && \
@@ -206,7 +203,8 @@ RUN cat <<'DARK_STYLES_EOF' > app/src/main/res/values-night/colors.xml
 </resources>
 DARK_STYLES_EOF
 
-RUN cat <<APP_GRADLE_EOF > app/build.gradle
+RUN if [ -f "keystore.jks" ]; then \
+    cat <<APP_GRADLE_EOF > app/build.gradle
 apply plugin: 'com.android.application'
 
 android {
@@ -223,13 +221,61 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            signingConfigs.release {
+            signingConfigs.debug {
                 storeFile file("keystore.jks")
-                storePassword "$KEYSTORE_PASSWORD"
-                keyAlias "$KEY_ALIAS"
-                keyPassword "$KEY_PASSWORD"
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
             }
-            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.debug
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    
+    namespace '$PACKAGE_NAME'
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-common:1.9.0'
+    }
+    
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.4.2'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+}
+APP_GRADLE_EOF
+else \
+    cat <<APP_GRADLE_EOF > app/build.gradle
+apply plugin: 'com.android.application'
+
+android {
+    compileSdk 34
+    
+    defaultConfig {
+        applicationId "$PACKAGE_NAME"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    
+    buildTypes {
+        release {
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -259,6 +305,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
 }
 APP_GRADLE_EOF
+fi
 
 RUN cat <<ROOT_GRADLE_EOF > build.gradle
 buildscript {
