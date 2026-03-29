@@ -48,9 +48,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:buildx-stable-1
 
       - name: Set up keystore
         if: ${{ github.event.inputs.build_type == 'release' }}
@@ -65,14 +62,7 @@ jobs:
           push: false
           load: true
           tags: webview-builder
-          build-args: |
-            WEBSITE_URL=${{ github.event.inputs.url }}
-            APP_NAME=${{ github.event.inputs.app_name }}
-            PACKAGE_NAME=${{ github.event.inputs.package_name }}
-            FAVICON_URL=${{ github.event.inputs.favicon_url }}
-            BUILD_TYPE=${{ github.event.inputs.build_type }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: WEBSITE_URL=${{ github.event.inputs.url }},APP_NAME=${{ github.event.inputs.app_name }},PACKAGE_NAME=${{ github.event.inputs.package_name }},FAVICON_URL=${{ github.event.inputs.favicon_url }},BUILD_TYPE=${{ github.event.inputs.build_type }}
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -86,14 +76,7 @@ jobs:
           push: false
           load: true
           tags: webview-builder
-          build-args: |
-            WEBSITE_URL=${{ github.event.inputs.url }}
-            APP_NAME=${{ github.event.inputs.app_name }}
-            PACKAGE_NAME=${{ github.event.inputs.package_name }}
-            FAVICON_URL=${{ github.event.inputs.favicon_url }}
-            BUILD_TYPE=${{ github.event.inputs.build_type }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: WEBSITE_URL=${{ github.event.inputs.url }},APP_NAME=${{ github.event.inputs.app_name }},PACKAGE_NAME=${{ github.event.inputs.package_name }},FAVICON_URL=${{ github.event.inputs.favicon_url }},BUILD_TYPE=${{ github.event.inputs.build_type }}
 
       - name: Extract APK from container
         run: |
