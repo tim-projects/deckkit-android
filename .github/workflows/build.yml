@@ -50,9 +50,12 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Set up keystore
-        if: ${{ github.event.inputs.build_type == 'release' }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+          if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+          else
+            touch keystore.jks
+          fi
 
       - name: Build Docker image
         if: ${{ github.event.inputs.build_type == 'release' }}
