@@ -16,7 +16,11 @@ WORKDIR /project
 
 RUN sudo apt-get update && sudo apt-get install -y wget imagemagick
 
-COPY keystore.jks /project/keystore.jks 2>/dev/null || touch /project/keystore.jks
+RUN ls -la
+
+RUN if [ -f "keystore.jks" ]; then \
+    cp keystore.jks /project/keystore.jks; \
+    fi
 
 RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
     mkdir -p app/src/main/java/${PACKAGE_PATH} && \
