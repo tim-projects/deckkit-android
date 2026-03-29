@@ -240,7 +240,7 @@ GW
 
 RUN chmod +x gradlew
 
-RUN gradlew clean assembleDebug 2>&1 | tail -30
+RUN pwd && ls -la gradlew && ./gradlew clean assembleDebug 2>&1 | tail -30
 
 RUN find /project -name "*.apk"
 
