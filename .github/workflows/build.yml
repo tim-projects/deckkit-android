@@ -1,0 +1,109 @@
+name: Build APK
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Website URL'
+        required: true
+        default: 'https://deckk.it'
+        type: string
+      app_name:
+        description: 'App Name'
+        required: true
+        default: 'deckk.it'
+        type: string
+      package_name:
+        description: 'Package Name'
+        required: true
+        default: 'com.deckk.it'
+        type: string
+      favicon_url:
+        description: 'Favicon URL (optional)'
+        required: false
+        type: string
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up secrets
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+        shell: bash
+
+      - name: Build Docker image
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        run: |
+          docker build \
+            --build-arg WEBSITE_URL="${{ github.event.inputs.url }}" \
+            --build-arg APP_NAME="${{ github.event.inputs.app_name }}" \
+            --build-arg PACKAGE_NAME="${{ github.event.inputs.package_name }}" \
+            --build-arg FAVICON_URL="${{ github.event.inputs.favicon_url }}" \
+            --build-arg BUILD_TYPE="${{ github.event.inputs.build_type }}" \
+            --secret id=keystore,src=keystore.jks \
+            --build-arg KEYSTORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD }}" \
+            --build-arg KEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
+            --build-arg KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}" \
+            -t webview-builder \
+            .
+
+      - name: Build Docker image (debug)
+        if: ${{ github.event.inputs.build_type == 'debug' }}
+        run: |
+          docker build \
+            --build-arg WEBSITE_URL="${{ github.event.inputs.url }}" \
+            --build-arg APP_NAME="${{ github.event.inputs.app_name }}" \
+            --build-arg PACKAGE_NAME="${{ github.event.inputs.package_name }}" \
+            --build-arg FAVICON_URL="${{ github.event.inputs.favicon_url }}" \
+            --build-arg BUILD_TYPE="${{ github.event.inputs.build_type }}" \
+            -t webview-builder \
+            .
+
+      - name: Extract APK from container
+        run: |
+          CONTAINER_ID=$(docker create webview-builder)
+          docker cp "$CONTAINER_ID:/project/app/build/outputs/apk/${{ github.event.inputs.build_type }}/app-${{ github.event.inputs.build_type }}.apk" ./${{ github.event.inputs.app_name }}.apk
+          docker rm -v "$CONTAINER_ID"
+
+      - name: Verify APK exists
+        run: |
+          if [ ! -f "${{ github.event.inputs.app_name }}.apk" ]; then
+            echo "Error: APK file not found"
+            exit 1
+          fi
+          ls -lh ${{ github.event.inputs.app_name }}.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}.apk
+          path: ${{ github.event.inputs.app_name }}.apk
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          rm -f keystore.jks
