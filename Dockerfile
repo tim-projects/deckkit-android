@@ -351,6 +351,8 @@ DEFAULT_JVM_OPTS="-Xmx2048m -Dfile.encoding=UTF-8"
 exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS -classpath "$GRADLE_WRAPPER_JAR" org.gradle.wrapper.GradleWrapperMain "$@"
 GRADLEW_EOF
 
+RUN ls -la /project/app/build/ 2>/dev/null || echo "build dir not found"
+
 RUN if [ -z "$JAVA_HOME" ]; then \
         if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then \
             export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"; \
@@ -361,8 +363,8 @@ RUN if [ -z "$JAVA_HOME" ]; then \
         ./gradlew assembleRelease; \
     else \
         ./gradlew assembleDebug; \
-    fi 2>&1 | tail -100
+    fi 2>&1 || echo "BUILD OUTPUT ABOVE"
 
-RUN find /project/app/build/outputs -name "*.apk"
+RUN find /project -name "*.apk" 2>/dev/null || echo "No APK found"
 
 CMD ["/bin/bash", "-c", "echo 'Build complete.' && sleep infinity"]
