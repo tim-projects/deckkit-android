@@ -203,9 +203,12 @@ RUN cat <<'DARK_STYLES_EOF' > app/src/main/res/values-night/colors.xml
 </resources>
 DARK_STYLES_EOF
 
-RUN if [ -f "keystore.jks" ]; then \
-    cat <<APP_GRADLE_EOF > app/build.gradle
+RUN cat <<'APP_GRADLE_EOF' > app/build.gradle
 apply plugin: 'com.android.application'
+
+def keystorePass = System.getenv("KEYSTORE_PASSWORD") ?: "dummy"
+def keyAlias = System.getenv("KEY_ALIAS") ?: "dummy"
+def keyPass = System.getenv("KEY_PASSWORD") ?: "dummy"
 
 android {
     compileSdk 34
@@ -221,63 +224,22 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            signingConfigs.debug {
-                storeFile file("keystore.jks")
-                storePassword System.getenv("KEYSTORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD")
+            if (System.getenv("KEYSTORE_PASSWORD")) {
+                signingConfigs.release {
+                    storeFile file("keystore.jks")
+                    storePassword keystorePass
+                    keyAlias keyAlias
+                    keyPassword keyPass
+                }
+                signingConfig signingConfigs.release
             }
-        }
-        debug {
-            signingConfig signingConfigs.debug
-        }
-    }
-    
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-    
-    namespace '$PACKAGE_NAME'
-}
-
-configurations.all {
-    resolutionStrategy {
-        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
-        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
-        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0'
-        force 'org.jetbrains.kotlin:kotlin-stdlib-common:1.9.0'
-    }
-    
-    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
-    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
-}
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.4.2'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
-}
-APP_GRADLE_EOF
-else \
-    cat <<APP_GRADLE_EOF > app/build.gradle
-apply plugin: 'com.android.application'
-
-android {
-    compileSdk 34
-    
-    defaultConfig {
-        applicationId "$PACKAGE_NAME"
-        minSdk 24
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
-    }
-    
-    buildTypes {
-        release {
-            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+        debug {
+            if (System.getenv("KEYSTORE_PASSWORD")) {
+                signingConfig signingConfigs.release
+            }
+        }
     }
     
     compileOptions {
@@ -305,7 +267,6 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
 }
 APP_GRADLE_EOF
-fi
 
 RUN cat <<ROOT_GRADLE_EOF > build.gradle
 buildscript {

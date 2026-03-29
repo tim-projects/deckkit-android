@@ -71,11 +71,12 @@ jobs:
             PACKAGE_NAME=${{ github.event.inputs.package_name }}
             FAVICON_URL=${{ github.event.inputs.favicon_url }}
             BUILD_TYPE=${{ github.event.inputs.build_type }}
-            KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
-            KEY_ALIAS=${{ secrets.KEY_ALIAS }}
-            KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Build Docker image (debug)
         if: ${{ github.event.inputs.build_type == 'debug' }}
