@@ -341,17 +341,19 @@ DEFAULT_JVM_OPTS="-Xmx2048m -Dfile.encoding=UTF-8"
 exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS -classpath "$GRADLE_WRAPPER_JAR" org.gradle.wrapper.GradleWrapperMain "$@"
 GRADLEW_EOF
 
-RUN if [ -z "$JAVA_HOME" ]; then \
+RUN ls -la /project/app/build/outputs/apk/ 2>/dev/null || echo "No apk dir yet" && \
+    if [ -z "$JAVA_HOME" ]; then \
         if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then \
             export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"; \
         elif [ -d "/usr/lib/jvm/java-11-openjdk-amd64" ]; then \
             export JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"; \
         fi; \
     fi && \
+    echo "JAVA_HOME=$JAVA_HOME" && \
     if [ "$BUILD_TYPE" = "release" ]; then \
-        ./gradlew assembleRelease --stacktrace 2>&1 || (echo "BUILD FAILED" && cat app/build/reports/*.log 2>/dev/null || true); \
+        ./gradlew assembleRelease --stacktrace 2>&1; \
     else \
-        ./gradlew assembleDebug --stacktrace 2>&1 || (echo "BUILD FAILED" && cat app/build/reports/*.log 2>/dev/null || true); \
+        ./gradlew assembleDebug --stacktrace 2>&1; \
     fi
 
 CMD ["/bin/bash", "-c", "echo 'Build complete.' && sleep infinity"]
