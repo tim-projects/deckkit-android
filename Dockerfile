@@ -1,16 +1,22 @@
 FROM docker.io/cimg/android:2024.01.1
 
-ARG WEBSITE_URL
-ARG APP_NAME
-ARG PACKAGE_NAME
-ARG FAVICON_URL
+ARG WEBSITE_URL=https://example.com
+ARG APP_NAME=MyApp
+ARG PACKAGE_NAME=com.example.app
+ARG FAVICON_URL=
 ARG BUILD_TYPE=release
+
+ENV WEBSITE_URL=$WEBSITE_URL
+ENV APP_NAME=$APP_NAME
+ENV PACKAGE_NAME=$PACKAGE_NAME
+ENV FAVICON_URL=$FAVICON_URL
+ENV BUILD_TYPE=$BUILD_TYPE
 
 WORKDIR /project
 
 RUN sudo apt-get update && sudo apt-get install -y wget imagemagick
 
-COPY keystore.jks /project/keystore.jks
+COPY keystore.jks /project/keystore.jks 2>/dev/null || touch /project/keystore.jks
 
 RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
     mkdir -p app/src/main/java/${PACKAGE_PATH} && \
@@ -214,7 +220,7 @@ android {
     compileSdk 34
     
     defaultConfig {
-        applicationId "$PACKAGE_NAME"
+        applicationId System.getenv("PACKAGE_NAME")
         minSdk 24
         targetSdk 34
         versionCode 1
@@ -247,7 +253,7 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
     
-    namespace '$PACKAGE_NAME'
+    namespace System.getenv("PACKAGE_NAME")
 }
 
 configurations.all {
@@ -341,8 +347,12 @@ DEFAULT_JVM_OPTS="-Xmx2048m -Dfile.encoding=UTF-8"
 exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS -classpath "$GRADLE_WRAPPER_JAR" org.gradle.wrapper.GradleWrapperMain "$@"
 GRADLEW_EOF
 
-RUN ls -la /project/
-RUN which java || ls /usr/lib/jvm/
-RUN java -Version || true
+RUN if [ -z "$JAVA_HOME" ]; then \
+        if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then \
+            export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"; \
+        fi; \
+    fi && \
+    java -version && \
+    ./gradlew assembleDebug
 
 CMD ["/bin/bash", "-c", "echo 'Build complete.' && sleep infinity"]
