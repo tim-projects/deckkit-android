@@ -357,6 +357,12 @@ RUN if [ -z "$JAVA_HOME" ]; then \
         fi; \
     fi && \
     java -version && \
-    ./gradlew assembleDebug
+    if [ "$BUILD_TYPE" = "release" ]; then \
+        ./gradlew assembleRelease; \
+    else \
+        ./gradlew assembleDebug; \
+    fi 2>&1 | tail -100
+
+RUN find /project/app/build/outputs -name "*.apk"
 
 CMD ["/bin/bash", "-c", "echo 'Build complete.' && sleep infinity"]
