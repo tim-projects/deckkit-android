@@ -29,6 +29,16 @@ on:
         description: 'Favicon URL (optional)'
         required: false
         type: string
+      version:
+        description: 'Version (e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
+        type: string
+      version_code:
+        description: 'Version Code (integer)'
+        required: true
+        default: '1'
+        type: string
       build_type:
         description: 'Build Type'
         required: true
@@ -76,6 +86,8 @@ jobs:
           APP_NAME: ${{ github.event.inputs.app_name }}
           PACKAGE_NAME: ${{ github.event.inputs.package_name }}
           FAVICON_URL: ${{ github.event.inputs.favicon_url }}
+          VERSION: ${{ github.event.inputs.version }}
+          VERSION_CODE: ${{ github.event.inputs.version_code }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -99,6 +111,8 @@ jobs:
           APP_NAME: ${{ github.event.inputs.app_name }}
           PACKAGE_NAME: ${{ github.event.inputs.package_name }}
           FAVICON_URL: ${{ github.event.inputs.favicon_url }}
+          VERSION: ${{ github.event.inputs.version }}
+          VERSION_CODE: ${{ github.event.inputs.version_code }}
 
       - name: Extract APK from container
         run: |
@@ -121,8 +135,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.inputs.app_name }} ${{ github.event.inputs.build_type }} APK
-          tag_name: ${{ github.event.inputs.app_name }}-${{ github.event.inputs.build_type }}-${{ github.run_id }}
+          name: ${{ github.event.inputs.app_name }} ${{ github.event.inputs.version }}
+          tag_name: v${{ github.event.inputs.version }}
           draft: false
           prerelease: false
           files: ${{ github.event.inputs.app_name }}.apk

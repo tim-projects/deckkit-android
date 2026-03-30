@@ -241,8 +241,8 @@ android {
         applicationId System.getenv("PACKAGE_NAME")
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode System.getenv("VERSION_CODE") as Integer ?: 1
+        versionName System.getenv("VERSION") ?: "1.0.0"
     }
     buildTypes {
         release {
