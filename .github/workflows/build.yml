@@ -71,8 +71,11 @@ jobs:
             PACKAGE_NAME=${{ github.event.inputs.package_name }}
             FAVICON_URL=${{ github.event.inputs.favicon_url }}
             BUILD_TYPE=${{ github.event.inputs.build_type }}
-            CACHE_DATE=${{ github.run_id }}
         env:
+          WEBSITE_URL: ${{ github.event.inputs.url }}
+          APP_NAME: ${{ github.event.inputs.app_name }}
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+          FAVICON_URL: ${{ github.event.inputs.favicon_url }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -91,7 +94,11 @@ jobs:
             PACKAGE_NAME=${{ github.event.inputs.package_name }}
             FAVICON_URL=${{ github.event.inputs.favicon_url }}
             BUILD_TYPE=${{ github.event.inputs.build_type }}
-            CACHE_DATE=${{ github.run_id }}
+        env:
+          WEBSITE_URL: ${{ github.event.inputs.url }}
+          APP_NAME: ${{ github.event.inputs.app_name }}
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+          FAVICON_URL: ${{ github.event.inputs.favicon_url }}
 
       - name: Extract APK from container
         run: |
