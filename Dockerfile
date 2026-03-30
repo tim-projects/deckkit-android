@@ -134,20 +134,12 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         webSettings.setMediaPlaybackRequiresUserGesture(false);
         webSettings.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+        
+        webView.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url.contains("accounts.google.com/o/oauth2") || 
-                    url.contains("oauth2.googleapis.com") ||
-                    url.contains("oauth.googleusercontent.com") ||
-                    url.contains("googleusercontent.com") ||
-                    url.contains("signin") && url.contains("google") ||
-                    url.contains("auth.google.com")) {
-                    openInCustomTab(url);
-                    return true;
-                }
-                
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     Uri uri = Uri.parse(url);
                     String host = uri.getHost();
@@ -157,6 +149,7 @@ public class MainActivity extends AppCompatActivity {
                         host.contains("firebaseapp.com") ||
                         host.contains("firebase.com") ||
                         host.contains("accounts.google.com") ||
+                        host.contains("oauth2.googleapis.com") ||
                         host.contains("ssl.gstatic.com") ||
                         host.contains("gstatic.com"))) {
                         return false;
