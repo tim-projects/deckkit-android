@@ -242,7 +242,4 @@ RUN chmod +x gradlew && ls -la /project/ && ls -la /project/gradlew
 
 RUN ./gradlew clean assembleDebug 2>&1 | tail -50
 
-RUN find /project -name "*.apk" -type f -exec ls -la {} \; || echo "No APKs found in /project"
-RUN ls -laR /project/app/build/outputs/ 2>/dev/null || echo "No outputs dir"
-
 CMD ["/bin/bash", "-c", "echo done"]
