@@ -115,6 +115,8 @@ jobs:
             PACKAGE_NAME=${{ github.event.inputs.package_name }}
             FAVICON_URL=${{ github.event.inputs.favicon_url }}
             BUILD_TYPE=${{ github.event.inputs.build_type }}
+            VERSION=${{ steps.version.outputs.version }}
+            VERSION_CODE=${{ steps.version.outputs.version_code }}
         env:
           WEBSITE_URL: ${{ github.event.inputs.url }}
           APP_NAME: ${{ github.event.inputs.app_name }}
@@ -140,6 +142,8 @@ jobs:
             PACKAGE_NAME=${{ github.event.inputs.package_name }}
             FAVICON_URL=${{ github.event.inputs.favicon_url }}
             BUILD_TYPE=${{ github.event.inputs.build_type }}
+            VERSION=${{ steps.version.outputs.version }}
+            VERSION_CODE=${{ steps.version.outputs.version_code }}
         env:
           WEBSITE_URL: ${{ github.event.inputs.url }}
           APP_NAME: ${{ github.event.inputs.app_name }}
