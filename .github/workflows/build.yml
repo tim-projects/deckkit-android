@@ -155,16 +155,19 @@ jobs:
           sleep 5
           APK_PATH=$(docker exec "$CONTAINER_ID" find /project -name "*.apk" | head -1)
           echo "Found APK at: $APK_PATH"
-          docker cp "$CONTAINER_ID:$APK_PATH" ./${{ github.event.inputs.app_name }}.apk
+          docker cp "$CONTAINER_ID:$APK_PATH" ./temp.apk
           docker rm -f "$CONTAINER_ID"
+          
+          VERSION=${{ steps.version.outputs.version }}
+          mv temp.apk ${{ github.event.inputs.app_name }}-${VERSION}.apk
 
       - name: Verify APK exists
         run: |
-          if [ ! -f "${{ github.event.inputs.app_name }}.apk" ]; then
+          if [ ! -f "${{ github.event.inputs.app_name }}-${{ steps.version.outputs.version }}.apk" ]; then
             echo "Error: APK file not found"
             exit 1
           fi
-          ls -lh ${{ github.event.inputs.app_name }}.apk
+          ls -lh ${{ github.event.inputs.app_name }}-${{ steps.version.outputs.version }}.apk
 
       - name: Create GitHub Release
         if: ${{ github.event.inputs.build_type == 'release' }}
@@ -174,7 +177,7 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
-          files: ${{ github.event.inputs.app_name }}.apk
+          files: ${{ github.event.inputs.app_name }}-${{ steps.version.outputs.version }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
