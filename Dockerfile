@@ -240,6 +240,8 @@ GW
 
 RUN chmod +x gradlew && ls -la /project/ && ls -la /project/gradlew
 
+RUN ./gradlew clean assembleDebug 2>&1 | tail -50
+
 RUN find /project -name "*.apk"
 
 CMD ["/bin/bash", "-c", "echo done"]
