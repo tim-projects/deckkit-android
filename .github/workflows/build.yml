@@ -84,7 +84,7 @@ jobs:
           fi
           
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          VERSION_CODE=$((MAJOR * 1000 + MINOR * 100 + PATCH))
           
           echo "New version: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
