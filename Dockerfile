@@ -138,6 +138,16 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url.contains("accounts.google.com/o/oauth2") || 
+                    url.contains("oauth2.googleapis.com") ||
+                    url.contains("oauth.googleusercontent.com") ||
+                    url.contains("googleusercontent.com") ||
+                    url.contains("signin") && url.contains("google") ||
+                    url.contains("auth.google.com")) {
+                    openInCustomTab(url);
+                    return true;
+                }
+                
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     Uri uri = Uri.parse(url);
                     String host = uri.getHost();
