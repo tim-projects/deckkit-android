@@ -5,7 +5,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
             touch keystore.jks
           fi
 
-      - name: Build Docker image
+      - name: Build Docker image (release)
         if: ${{ github.event.inputs.build_type == 'release' }}
         uses: docker/build-push-action@v5
         with:
@@ -99,11 +99,16 @@ jobs:
           fi
           ls -lh ${{ github.event.inputs.app_name }}.apk
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.inputs.app_name }}.apk
-          path: ${{ github.event.inputs.app_name }}.apk
+          name: ${{ github.event.inputs.app_name }} ${{ github.event.inputs.build_type }} APK
+          tag_name: ${{ github.event.inputs.app_name }}-${{ github.event.inputs.build_type }}-${{ github.run_id }}
+          draft: false
+          prerelease: false
+          files: ${{ github.event.inputs.app_name }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cleanup secrets
         if: always()
