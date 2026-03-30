@@ -84,7 +84,8 @@ jobs:
       - name: Extract APK from container
         run: |
           CONTAINER_ID=$(docker create webview-builder)
-          docker cp "$CONTAINER_ID:/project/app/build/outputs/apk/${{ github.event.inputs.build_type }}/app-${{ github.event.inputs.build_type }}.apk" ./${{ github.event.inputs.app_name }}.apk
+          echo "Searching for APK..."
+          docker exec "$CONTAINER_ID" find /project -name "*.apk"
           docker rm -v "$CONTAINER_ID"
 
       - name: Verify APK exists
