@@ -65,7 +65,13 @@ jobs:
           push: false
           load: true
           tags: webview-builder
-          build-args: WEBSITE_URL=${{ github.event.inputs.url }},APP_NAME=${{ github.event.inputs.app_name }},PACKAGE_NAME=${{ github.event.inputs.package_name }},FAVICON_URL=${{ github.event.inputs.favicon_url }},BUILD_TYPE=${{ github.event.inputs.build_type }}
+          build-args: |
+            WEBSITE_URL=${{ github.event.inputs.url }}
+            APP_NAME=${{ github.event.inputs.app_name }}
+            PACKAGE_NAME=${{ github.event.inputs.package_name }}
+            FAVICON_URL=${{ github.event.inputs.favicon_url }}
+            BUILD_TYPE=${{ github.event.inputs.build_type }}
+            CACHE_DATE=${{ github.run_id }}
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -79,7 +85,13 @@ jobs:
           push: false
           load: true
           tags: webview-builder
-          build-args: WEBSITE_URL=${{ github.event.inputs.url }},APP_NAME=${{ github.event.inputs.app_name }},PACKAGE_NAME=${{ github.event.inputs.package_name }},FAVICON_URL=${{ github.event.inputs.favicon_url }},BUILD_TYPE=${{ github.event.inputs.build_type }}
+          build-args: |
+            WEBSITE_URL=${{ github.event.inputs.url }}
+            APP_NAME=${{ github.event.inputs.app_name }}
+            PACKAGE_NAME=${{ github.event.inputs.package_name }}
+            FAVICON_URL=${{ github.event.inputs.favicon_url }}
+            BUILD_TYPE=${{ github.event.inputs.build_type }}
+            CACHE_DATE=${{ github.run_id }}
 
       - name: Extract APK from container
         run: |
