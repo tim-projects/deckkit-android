@@ -62,7 +62,29 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name="androidx.browser.customtabs.CustomTabsActivity" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+            </intent-filter>
+        </activity>
     </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="firebaseauth" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="googleusercontent" />
+        </intent>
+    </queries>
 </manifest>
 MANIFEST_EOF
 
@@ -85,6 +107,7 @@ import android.webkit.WebViewClient;
 import android.net.http.SslError;
 import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.browser.customtabs.CustomTabsIntent;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
@@ -105,24 +128,42 @@ public class MainActivity extends AppCompatActivity {
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
+        webSettings.setDatabaseEnabled(true);
+        webSettings.setAllowContentAccess(true);
+        webSettings.setAllowFileAccess(true);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        webSettings.setMediaPlaybackRequiresUserGesture(false);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 if (url.startsWith("http://") || url.startsWith("https://")) {
-                    if (Uri.parse(url).getHost().equals(Uri.parse(BASE_URL).getHost())) {
+                    Uri uri = Uri.parse(url);
+                    String host = uri.getHost();
+                    if (host != null && (host.equals(Uri.parse(BASE_URL).getHost()) || 
+                        host.contains("googleapis.com") ||
+                        host.contains("google.com") ||
+                        host.contains("firebaseapp.com") ||
+                        host.contains("firebase.com") ||
+                        host.contains("accounts.google.com") ||
+                        host.contains("ssl.gstatic.com") ||
+                        host.contains("gstatic.com"))) {
                         return false;
                     } else {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        startActivity(intent);
+                        openInCustomTab(url);
                         return true;
                     }
-                } else {
+                } else if (url.startsWith("intent://")) {
                     try {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        startActivity(intent);
+                        Intent intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
+                        Intent chooser = Intent.createChooser(intent, "Open with");
+                        startActivity(chooser);
                     } catch (Exception e) {}
+                    return true;
+                } else if (url.startsWith("firebaseauth://") || url.startsWith("chrome://")) {
+                    return false;
+                } else {
+                    openInCustomTab(url);
                     return true;
                 }
             }
@@ -142,6 +183,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
         webView.loadUrl(BASE_URL);
+    }
+
+    private void openInCustomTab(String url) {
+        try {
+            CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
+            CustomTabsIntent customTabsIntent = builder.build();
+            customTabsIntent.launchUrl(this, Uri.parse(url));
+        } catch (Exception e) {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            startActivity(intent);
+        }
     }
 
     @Override
@@ -209,6 +261,7 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.4.2'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+    implementation 'androidx.browser:browser:1.4.0'
 }
 GRADLE_EOF
 
