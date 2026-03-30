@@ -238,9 +238,7 @@ JAVA_HOME=${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which java))))}
 exec $JAVA_HOME/bin/java -Xmx2048m -Dfile.encoding=UTF-8 -classpath $(dirname $0)/gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain "$@"
 GW
 
-RUN chmod +x gradlew
-
-RUN pwd && ls -la gradlew && ./gradlew clean assembleDebug 2>&1 | tail -30
+RUN chmod +x gradlew && ls -la /project/ && ls -la /project/gradlew
 
 RUN find /project -name "*.apk"
 
