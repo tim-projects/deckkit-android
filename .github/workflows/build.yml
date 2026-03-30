@@ -29,16 +29,15 @@ on:
         description: 'Favicon URL (optional)'
         required: false
         type: string
-      version:
-        description: 'Version (e.g. 1.0.0)'
+      bump_type:
+        description: 'Version bump type'
         required: true
-        default: '1.0.0'
-        type: string
-      version_code:
-        description: 'Version Code (integer)'
-        required: true
-        default: '1'
-        type: string
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       build_type:
         description: 'Build Type'
         required: true
@@ -55,6 +54,41 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest version
+        id: version
+        run: |
+          git fetch --tags
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
+          VERSION=${LATEST_TAG:-0.0.0}
+          echo "Latest version: $VERSION"
+          
+          IFS='.' read -ra PARTS <<< "$VERSION"
+          MAJOR=${PARTS[0]:-0}
+          MINOR=${PARTS[1]:-0}
+          PATCH=${PARTS[2]:-0}
+          
+          BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+          
+          if [ "$BUMP_TYPE" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "$BUMP_TYPE" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -86,8 +120,8 @@ jobs:
           APP_NAME: ${{ github.event.inputs.app_name }}
           PACKAGE_NAME: ${{ github.event.inputs.package_name }}
           FAVICON_URL: ${{ github.event.inputs.favicon_url }}
-          VERSION: ${{ github.event.inputs.version }}
-          VERSION_CODE: ${{ github.event.inputs.version_code }}
+          VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -111,8 +145,8 @@ jobs:
           APP_NAME: ${{ github.event.inputs.app_name }}
           PACKAGE_NAME: ${{ github.event.inputs.package_name }}
           FAVICON_URL: ${{ github.event.inputs.favicon_url }}
-          VERSION: ${{ github.event.inputs.version }}
-          VERSION_CODE: ${{ github.event.inputs.version_code }}
+          VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
 
       - name: Extract APK from container
         run: |
@@ -133,15 +167,23 @@ jobs:
           ls -lh ${{ github.event.inputs.app_name }}.apk
 
       - name: Create GitHub Release
+        if: ${{ github.event.inputs.build_type == 'release' }}
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.inputs.app_name }} ${{ github.event.inputs.version }}
-          tag_name: v${{ github.event.inputs.version }}
+          name: ${{ github.event.inputs.app_name }} v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
           files: ${{ github.event.inputs.app_name }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag release
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        run: |
+          git tag -d v${{ steps.version.outputs.version }} 2>/dev/null || true
+          git tag v${{ steps.version.outputs.version }}
+          git push origin v${{ steps.version.outputs.version }}
 
       - name: Cleanup secrets
         if: always()
