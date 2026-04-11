@@ -60,6 +60,7 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher">
         <activity android:name=".MainActivity" android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -190,7 +191,22 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.loadUrl(BASE_URL);
+        webView.restoreState(savedInstanceState);
+        if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
+            webView.loadUrl(BASE_URL);
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        webView.saveState(outState);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        webView.restoreState(savedInstanceState);
     }
 
     private void openInCustomTab(String url) {
