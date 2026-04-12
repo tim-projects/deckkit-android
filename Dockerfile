@@ -115,21 +115,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
 
 public class MainActivity extends AppCompatActivity {
-    @Override
-    public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
-        WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
-        WebView newWebView = new WebView(this);
-        newWebView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                openInCustomTab(url);
-                return true;
-            }
-        });
-        transport.setWebView(newWebView);
-        resultMsg.sendToTarget();
-        return true;
-    }
     private WebView webView;
     private ProgressBar progressBar;
     private static final String BASE_URL = "$WEBSITE_URL";
@@ -199,6 +184,21 @@ public class MainActivity extends AppCompatActivity {
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                WebView newWebView = new WebView(view.getContext());
+                newWebView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        openInCustomTab(url);
+                        return true;
+                    }
+                });
+                transport.setWebView(newWebView);
+                resultMsg.sendToTarget();
+                return true;
+            }
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 if (newProgress == 100) progressBar.setVisibility(View.GONE);
