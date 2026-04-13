@@ -267,12 +267,20 @@ RUN cat <<'GRADLE_EOF' > app/build.gradle
 apply plugin: 'com.android.application'
 
 def getVersionCode() {
-    def vc = System.getenv("VERSION_CODE")?.toInteger()
-    if (vc == null || vc < 1) {
+    def vcStr = System.getenv("VERSION_CODE")
+    println("VERSION_CODE env value: '${vcStr}', type: ${vcStr?.getClass()}")
+    if (vcStr == null || vcStr.isEmpty()) {
         println("WARNING: VERSION_CODE not set, using 1")
         return 1
     }
-    return vc
+    try {
+        def vc = vcStr.toInteger()
+        println("Parsed VERSION_CODE: ${vc}")
+        return vc > 0 ? vc : 1
+    } catch (Exception e) {
+        println("ERROR parsing VERSION_CODE: ${e.message}")
+        return 1
+    }
 }
 
 android {
