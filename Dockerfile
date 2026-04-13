@@ -16,6 +16,9 @@ ENV FAVICON_URL=$FAVICON_URL
 ENV BUILD_TYPE=$BUILD_TYPE
 ENV VERSION=$VERSION
 ENV VERSION_CODE=$VERSION_CODE
+ENV KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD
+ENV KEY_ALIAS=$KEY_ALIAS
+ENV KEY_PASSWORD=$KEY_PASSWORD
 
 WORKDIR /project
 
@@ -263,13 +266,22 @@ RUN echo '<?xml version="1.0" encoding="utf-8"?><resources><color name="progress
 RUN cat <<'GRADLE_EOF' > app/build.gradle
 apply plugin: 'com.android.application'
 
+def getVersionCode() {
+    def vc = System.getenv("VERSION_CODE")?.toInteger()
+    if (vc == null || vc < 1) {
+        println("WARNING: VERSION_CODE not set, using 1")
+        return 1
+    }
+    return vc
+}
+
 android {
     compileSdk 34
     defaultConfig {
         applicationId System.getenv("PACKAGE_NAME")
         minSdk 24
         targetSdk 34
-        versionCode System.getenv("VERSION_CODE")?.toInteger() ?: 1
+        versionCode getVersionCode()
         versionName System.getenv("VERSION") ?: "1.0.0"
     }
     buildTypes {
