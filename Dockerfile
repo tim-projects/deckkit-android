@@ -335,6 +335,7 @@ allprojects {
 task clean(type: Delete) { delete rootProject.buildDir }
 ROOT_EOF
 
+RUN echo "VERSION_CODE from env: $VERSION_CODE" && echo "VERSION from env: $VERSION"
 RUN echo "android.useAndroidX=true" > gradle.properties
 RUN echo "android.enableJetifier=true" >> gradle.properties
 RUN echo "org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8" >> gradle.properties
