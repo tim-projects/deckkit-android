@@ -105,6 +105,7 @@ package $PACKAGE_NAME;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
@@ -116,11 +117,27 @@ import android.net.http.SslError;
 import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private ProgressBar progressBar;
     private static final String BASE_URL = "$WEBSITE_URL";
+    private static final boolean DEBUG = "$BUILD_TYPE".equals("debug");
+    
+    private void log(String msg) {
+        Log.d("MainActivity", msg);
+        if (DEBUG) {
+            try {
+                File logFile = new File(getExternalFilesDir(null), "app.log");
+                FileWriter fw = new FileWriter(logFile, true);
+                fw.write(System.currentTimeMillis() + ": " + msg + "\n");
+                fw.close();
+            } catch (IOException e) {}
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -148,6 +165,7 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                log("shouldOverrideUrlLoading: " + url);
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     Uri uri = Uri.parse(url);
                     String host = uri.getHost();
@@ -160,8 +178,10 @@ public class MainActivity extends AppCompatActivity {
                         host.contains("oauth2.googleapis.com") ||
                         host.contains("ssl.gstatic.com") ||
                         host.contains("gstatic.com"))) {
+                        log("Loading in WebView: " + url);
                         return false;
                     } else {
+                        log("Opening in Custom Tab: " + url);
                         openInCustomTab(url);
                         return true;
                     }
@@ -189,11 +209,21 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                log("onCreateWindow called, isDialog: " + isDialog);
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
-                WebView newWebView = new WebView(view.getContext());
+                WebView newWebView = new WebView(MainActivity.this);
+                newWebView.getSettings().setJavaScriptEnabled(true);
+                newWebView.getSettings().setDomStorageEnabled(true);
                 newWebView.setWebViewClient(new WebViewClient() {
                     @Override
                     public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        log("Popup shouldOverrideUrlLoading: " + url);
+                        String lowerUrl = url.toLowerCase();
+                        if (lowerUrl.contains("oauth") || lowerUrl.contains("google") || lowerUrl.contains("accounts.google.com") || lowerUrl.contains("firebase")) {
+                            log("Loading popup in WebView: " + url);
+                            return false;
+                        }
+                        log("Opening popup in Custom Tab: " + url);
                         openInCustomTab(url);
                         return true;
                     }
@@ -267,20 +297,12 @@ RUN cat <<'GRADLE_EOF' > app/build.gradle
 apply plugin: 'com.android.application'
 
 def getVersionCode() {
-    def vcStr = System.getenv("VERSION_CODE")
-    println("VERSION_CODE env value: '${vcStr}', type: ${vcStr?.getClass()}")
-    if (vcStr == null || vcStr.isEmpty()) {
+    def vc = System.getenv("VERSION_CODE")?.toInteger()
+    if (vc == null || vc < 1) {
         println("WARNING: VERSION_CODE not set, using 1")
         return 1
     }
-    try {
-        def vc = vcStr.toInteger()
-        println("Parsed VERSION_CODE: ${vc}")
-        return vc > 0 ? vc : 1
-    } catch (Exception e) {
-        println("ERROR parsing VERSION_CODE: ${e.message}")
-        return 1
-    }
+    return vc
 }
 
 android {
@@ -335,7 +357,6 @@ allprojects {
 task clean(type: Delete) { delete rootProject.buildDir }
 ROOT_EOF
 
-RUN echo "VERSION_CODE from env: $VERSION_CODE" && echo "VERSION from env: $VERSION"
 RUN echo "android.useAndroidX=true" > gradle.properties
 RUN echo "android.enableJetifier=true" >> gradle.properties
 RUN echo "org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8" >> gradle.properties
