@@ -169,6 +169,10 @@ public class MainActivity extends AppCompatActivity {
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
+        webSettings.setDatabaseEnabled(true);
+        webSettings.setAppCacheEnabled(true);
+        webSettings.setAllowFileAccess(true);
+        webSettings.setAllowContentAccess(true);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
         webView.setWebViewClient(new WebViewClient() {
