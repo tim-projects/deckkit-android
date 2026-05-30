@@ -140,6 +140,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
@@ -147,20 +148,28 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.net.http.SslError;
-import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
-    private ProgressBar progressBar;
     private static final String BASE_URL = "$WEBSITE_URL";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Make it fullscreen for kiosk mode
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        
+        // Hide system UI for immersive experience
+        View decorView = getWindow().getDecorView();
+        int uiOptions = View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        decorView.setSystemUiVisibility(uiOptions);
+        
         setContentView(R.layout.activity_main);
         webView = findViewById(R.id.webview);
-        progressBar = findViewById(R.id.progressBar);
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -173,27 +182,41 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setAppCacheEnabled(true);
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
+        webSettings.setSaveFormData(true);
+        webSettings.setSavePassword(true);
+        webSettings.setSupportZoom(false);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        
+        // Disable context menu and zoom controls for kiosk mode
+        webView.setOnLongClickListener(v -> true);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url.startsWith("http://") || url.startsWith("https://")) {
-                    if (Uri.parse(url).getHost().equals(Uri.parse(BASE_URL).getHost())) {
-                        return false;
-                    } else {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        startActivity(intent);
-                        return true;
-                    }
-                } else {
+                // Handle special URL schemes
+                if (url.startsWith("mailto:") || url.startsWith("tel:") || 
+                    url.startsWith("sms:") || url.startsWith("geo:")) {
                     try {
                         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                         startActivity(intent);
+                        return true;
                     } catch (Exception e) {
-                        // Handle case where no app can handle the URL scheme
+                        return false;
                     }
+                }
+                
+                // Allow all http/https URLs to load in the WebView
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    return false; // Load in WebView
+                }
+                
+                // For everything else, try to open with an intent
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
                     return true;
+                } catch (Exception e) {
+                    return false;
                 }
             }
 
@@ -204,15 +227,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onProgressChanged(WebView view, int newProgress) {
-                if (newProgress == 100) {
-                    progressBar.setVisibility(View.GONE);
-                } else {
-                    progressBar.setVisibility(View.VISIBLE);
-                    progressBar.setProgress(newProgress);
-                }
-            }
+            // Empty implementation - we don't need progress bar or other UI elements
         });
 
         webView.loadUrl(BASE_URL);
@@ -226,52 +241,57 @@ public class MainActivity extends AppCompatActivity {
             super.onBackPressed();
         }
     }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            View decorView = getWindow().getDecorView();
+            int uiOptions = View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+            decorView.setSystemUiVisibility(uiOptions);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        webView.onPause();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        webView.onResume();
+    }
 }
 JAVA_EOF
 
 RUN cat <<LAYOUT_EOF > app/src/main/res/layout/activity_main.xml
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
-    <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="4dp"
-        android:layout_alignParentTop="true"
-        android:indeterminate="false"
-        android:visibility="gone"
-        android:max="100" />
     <WebView
         android:id="@+id/webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-</RelativeLayout>
+</FrameLayout>
 LAYOUT_EOF
 
 RUN echo "<resources><string name=\"app_name\">$APP_NAME</string></resources>" > app/src/main/res/values/strings.xml
-RUN cat <<'COLORS_EOF' > app/src/main/res/values/colors.xml
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="progressBarColor">@android:color/black</color>
-</resources>
-COLORS_EOF
+RUN echo "<resources></resources>" > app/src/main/res/values/colors.xml
 RUN cat <<'STYLES_EOF' > app/src/main/res/values/styles.xml
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:progressBarStyleHorizontal">@style/CustomProgressBar</item>
-    </style>
-    <style name="CustomProgressBar" parent="@android:style/Widget.ProgressBar.Horizontal">
-        <item name="android:progressTint">@color/progressBarColor</item>
     </style>
 </resources>
 STYLES_EOF
 RUN cat <<'DARK_STYLES_EOF' > app/src/main/res/values-night/colors.xml
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="progressBarColor">@android:color/white</color>
 </resources>
 DARK_STYLES_EOF
 
