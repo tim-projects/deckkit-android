@@ -170,6 +170,7 @@ public class MainActivity extends AppCompatActivity {
                     Uri uri = Uri.parse(url);
                     String host = uri.getHost();
                     if (host != null && (host.equals(Uri.parse(BASE_URL).getHost()) || 
+                        host.contains("auth.deckk.it") ||
                         host.contains("googleapis.com") ||
                         host.contains("google.com") ||
                         host.contains("firebaseapp.com") ||
@@ -210,28 +211,11 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
                 log("onCreateWindow called, isDialog: " + isDialog);
-                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
-                WebView newWebView = new WebView(MainActivity.this);
-                newWebView.getSettings().setJavaScriptEnabled(true);
-                newWebView.getSettings().setDomStorageEnabled(true);
-                newWebView.setWebViewClient(new WebViewClient() {
-                    @Override
-                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                        log("Popup shouldOverrideUrlLoading: " + url);
-                        String lowerUrl = url.toLowerCase();
-                        if (lowerUrl.contains("oauth") || lowerUrl.contains("google") || lowerUrl.contains("accounts.google.com") || lowerUrl.contains("firebase")) {
-                            log("Loading popup in WebView: " + url);
-                            return false;
-                        }
-                        log("Opening popup in Custom Tab: " + url);
-                        openInCustomTab(url);
-                        return true;
-                    }
-                });
-                transport.setWebView(newWebView);
-                resultMsg.sendToTarget();
-                return true;
+                // Return false to prevent popup creation - let navigation happen in main WebView
+                // This ensures localStorage/IndexedDB is shared for Firebase Auth
+                return false;
             }
+
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 if (newProgress == 100) progressBar.setVisibility(View.GONE);
