@@ -69,6 +69,13 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
         </activity>
         <activity android:name="androidx.browser.customtabs.CustomTabsActivity" android:exported="false">
             <intent-filter>
@@ -224,8 +231,10 @@ public class MainActivity extends AppCompatActivity {
         });
 
         webView.restoreState(savedInstanceState);
+        android.net.Uri incomingUri = getIntent().getData();
+        String urlToLoad = incomingUri != null ? incomingUri.toString() : BASE_URL;
         if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
-            webView.loadUrl(BASE_URL);
+            webView.loadUrl(urlToLoad);
         }
     }
 
