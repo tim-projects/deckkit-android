@@ -137,6 +137,7 @@ RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
 package $PACKAGE_NAME;
 
 import android.content.Intent;
+import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -179,13 +180,16 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
         webSettings.setDatabaseEnabled(true);
+        webSettings.setDatabasePath(getApplicationContext().getDir("databases", Context.MODE_PRIVATE).getPath());
         webSettings.setAppCacheEnabled(true);
+        webSettings.setAppCachePath(getApplicationContext().getCacheDir().getAbsolutePath());
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setSaveFormData(true);
         webSettings.setSavePassword(true);
         webSettings.setSupportZoom(false);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
         
         // Disable context menu and zoom controls for kiosk mode
         webView.setOnLongClickListener(v -> true);
