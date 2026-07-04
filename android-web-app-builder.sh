@@ -137,7 +137,6 @@ RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
 package $PACKAGE_NAME;
 
 import android.content.Intent;
-import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -180,9 +179,6 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
         webSettings.setDatabaseEnabled(true);
-        webSettings.setDatabasePath(getApplicationContext().getDir("databases", Context.MODE_PRIVATE).getPath());
-        webSettings.setAppCacheEnabled(true);
-        webSettings.setAppCachePath(getApplicationContext().getCacheDir().getAbsolutePath());
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setSaveFormData(true);
