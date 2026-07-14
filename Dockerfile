@@ -366,11 +366,13 @@ android {
         release {
             minifyEnabled false
             if (System.getenv("KEYSTORE_PASSWORD")) {
-                signingConfigs.release {
-                    storeFile file("keystore.jks")
-                    storePassword System.getenv("KEYSTORE_PASSWORD")
-                    keyAlias System.getenv("KEY_ALIAS")
-                    keyPassword System.getenv("KEY_PASSWORD")
+                signingConfigs {
+                    release {
+                        storeFile file("keystore.jks")
+                        storePassword System.getenv("KEYSTORE_PASSWORD")
+                        keyAlias System.getenv("KEY_ALIAS")
+                        keyPassword System.getenv("KEY_PASSWORD")
+                    }
                 }
                 signingConfig signingConfigs.release
             }
