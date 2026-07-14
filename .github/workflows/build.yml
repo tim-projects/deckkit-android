@@ -117,6 +117,9 @@ jobs:
             BUILD_TYPE=${{ github.event.inputs.build_type }}
             VERSION=${{ steps.version.outputs.version }}
             VERSION_CODE=${{ steps.version.outputs.version_code }}
+            KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+            KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+            KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
         env:
           WEBSITE_URL: ${{ github.event.inputs.url }}
           APP_NAME: ${{ github.event.inputs.app_name }}
