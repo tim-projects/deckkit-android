@@ -25,7 +25,7 @@ ENV KEY_PASSWORD=$KEY_PASSWORD
 
 WORKDIR /project
 
-RUN sudo apt-get update && sudo apt-get install -y wget imagemagick
+RUN sudo apt-get update && sudo apt-get install -y wget imagemagick librsvg2-bin
 
 RUN if [ -f "keystore.jks" ]; then cp keystore.jks /project/keystore.jks; fi
 
@@ -36,12 +36,9 @@ RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
     mkdir -p app/src/main/res/values-night && \
     mkdir -p gradle/wrapper
 
-RUN if [ -n "$FAVICON_URL" ]; then \
-        wget -qO favicon.png "$FAVICON_URL" || \
-        wget -qO favicon.png "https://placehold.co/512x512/000000/FFFFFF.png?text=APP"; \
-    else \
-        wget -qO favicon.png "https://placehold.co/512x512/000000/FFFFFF.png?text=APP"; \
-    fi
+RUN FAV="${FAVICON_URL:-https://deckk.it/images/favicon.svg}" && \
+    ( wget -qO favicon.png "$FAV" && convert favicon.png -resize 512x512 favicon_tmp.png && mv favicon_tmp.png favicon.png ) || \
+    wget -qO favicon.png "https://placehold.co/512x512/000000/FFFFFF.png?text=deckk.it"
 
 RUN mkdir -p app/src/main/res/mipmap-hdpi app/src/main/res/mipmap-mdpi app/src/main/res/mipmap-xhdpi app/src/main/res/mipmap-xxhdpi app/src/main/res/mipmap-xxxhdpi && \
     convert favicon.png -resize 48x48 app/src/main/res/mipmap-mdpi/ic_launcher.png && \

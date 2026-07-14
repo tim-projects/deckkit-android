@@ -28,6 +28,7 @@ on:
       favicon_url:
         description: 'Favicon URL (optional)'
         required: false
+        default: 'https://deckk.it/images/favicon.svg'
         type: string
       bump_type:
         description: 'Version bump type'

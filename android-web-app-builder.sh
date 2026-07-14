@@ -77,7 +77,7 @@ ARG FAVICON_URL
 
 WORKDIR /project
 
-RUN sudo apt-get update && sudo apt-get install -y wget imagemagick
+RUN sudo apt-get update && sudo apt-get install -y wget imagemagick librsvg2-bin
 
 RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
     mkdir -p app/src/main/java/${PACKAGE_PATH} && \
@@ -86,14 +86,9 @@ RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
     mkdir -p app/src/main/res/values-night && \
     mkdir -p gradle/wrapper
 
-RUN if [ -n "$FAVICON_URL" ]; then \
-        wget -qO favicon.png "$FAVICON_URL" || \
-        (echo "Could not download favicon from $FAVICON_URL. Using default." && \
-        wget -qO favicon.png "https://placehold.co/512x512/000000/FFFFFF.png?text=APP"); \
-    else \
-        echo "No favicon URL provided. Using default." && \
-        wget -qO favicon.png "https://placehold.co/512x512/000000/FFFFFF.png?text=APP"; \
-    fi
+RUN FAV="${FAVICON_URL:-https://deckk.it/images/favicon.svg}" && \
+    ( wget -qO favicon.png "$FAV" && convert favicon.png -resize 512x512 favicon_tmp.png && mv favicon_tmp.png favicon.png ) || \
+    wget -qO favicon.png "https://placehold.co/512x512/000000/FFFFFF.png?text=deckk.it"
 
 RUN mkdir -p app/src/main/res/mipmap-hdpi && \
     mkdir -p app/src/main/res/mipmap-mdpi && \
