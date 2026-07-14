@@ -63,7 +63,7 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher">
         <activity android:name=".MainActivity" android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -110,6 +110,8 @@ RUN cat <<JAVA_EOF > app/src/main/java/${PACKAGE_PATH}/MainActivity.java
 package $PACKAGE_NAME;
 
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
@@ -124,6 +126,8 @@ import android.net.http.SslError;
 import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewFeature;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -167,6 +171,10 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setMediaPlaybackRequiresUserGesture(false);
         webSettings.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
         webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+
+        // Avoid a white flash before the page paints: let the themed window background show through.
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        applyDarkMode(webSettings);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -237,6 +245,32 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isNightMode() {
+        int nightModeFlags = getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK;
+        return nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    private void applyDarkMode(WebSettings webSettings) {
+        boolean night = isNightMode();
+        // Tell web pages about the system color scheme so they can render their own dark theme.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+            WebSettingsCompat.setForceDark(webSettings,
+                    night ? WebSettingsCompat.FORCE_DARK_AUTO : WebSettingsCompat.FORCE_DARK_OFF);
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+            WebSettingsCompat.setForceDarkStrategy(webSettings,
+                    WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY);
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // Re-evaluate dark mode without reloading the page when the system theme changes at runtime.
+        applyDarkMode(webView.getSettings());
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         webView.saveState(outState);
@@ -252,6 +286,10 @@ public class MainActivity extends AppCompatActivity {
     private void openInCustomTab(String url) {
         try {
             CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
+            // Follow the system light/dark theme instead of forcing a light toolbar.
+            builder.setColorScheme(isNightMode()
+                    ? CustomTabsIntent.COLOR_SCHEME_DARK
+                    : CustomTabsIntent.COLOR_SCHEME_LIGHT);
             CustomTabsIntent customTabsIntent = builder.build();
             customTabsIntent.launchUrl(this, Uri.parse(url));
         } catch (Exception e) {
@@ -281,9 +319,9 @@ RUN cat <<LAYOUT_EOF > app/src/main/res/layout/activity_main.xml
 LAYOUT_EOF
 
 RUN echo "<resources><string name=\"app_name\">$APP_NAME</string></resources>" > app/src/main/res/values/strings.xml
-RUN echo '<?xml version="1.0" encoding="utf-8"?><resources><color name="progressBarColor">@android:color/black</color></resources>' > app/src/main/res/values/colors.xml
-RUN echo '<?xml version="1.0" encoding="utf-8"?><resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"><item name="android:progressBarStyleHorizontal">@style/CustomProgressBar</item></style><style name="CustomProgressBar" parent="@android:style/Widget.ProgressBar.Horizontal"><item name="android:progressTint">@color/progressBarColor</item></style></resources>' > app/src/main/res/values/styles.xml
-RUN echo '<?xml version="1.0" encoding="utf-8"?><resources><color name="progressBarColor">@android:color/white</color></resources>' > app/src/main/res/values-night/colors.xml
+RUN echo '<?xml version="1.0" encoding="utf-8"?><resources><color name="progressBarColor">@android:color/black</color><color name="windowBackground">#FFFFFF</color></resources>' > app/src/main/res/values/colors.xml
+RUN echo '<?xml version="1.0" encoding="utf-8"?><resources><style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="android:windowBackground">@color/windowBackground</item><item name="android:progressBarStyleHorizontal">@style/CustomProgressBar</item></style><style name="CustomProgressBar" parent="@android:style/Widget.ProgressBar.Horizontal"><item name="android:progressTint">@color/progressBarColor</item></style></resources>' > app/src/main/res/values/styles.xml
+RUN echo '<?xml version="1.0" encoding="utf-8"?><resources><color name="progressBarColor">@android:color/white</color><color name="windowBackground">#121212</color></resources>' > app/src/main/res/values-night/colors.xml
 
 RUN cat <<'GRADLE_EOF' > app/build.gradle
 apply plugin: 'com.android.application'
@@ -335,6 +373,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.4.2'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
     implementation 'androidx.browser:browser:1.4.0'
+    implementation 'androidx.webkit:webkit:1.9.0'
 }
 GRADLE_EOF
 

@@ -122,6 +122,7 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher">
         <activity android:name=".MainActivity" android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -148,7 +149,11 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.net.http.SslError;
+import android.graphics.Color;
+import android.content.res.Configuration;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewFeature;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
@@ -186,6 +191,10 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setSupportZoom(false);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        
+        // Avoid a white flash before the page paints: let the themed window background show through.
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        applyDarkMode(webSettings);
         
         // Disable context menu and zoom controls for kiosk mode
         webView.setOnLongClickListener(v -> true);
@@ -265,6 +274,30 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         webView.onResume();
     }
+
+    private boolean isNightMode() {
+        int nightModeFlags = getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK;
+        return nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    private void applyDarkMode(WebSettings webSettings) {
+        boolean night = isNightMode();
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+            WebSettingsCompat.setForceDark(webSettings,
+                    night ? WebSettingsCompat.FORCE_DARK_AUTO : WebSettingsCompat.FORCE_DARK_OFF);
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+            WebSettingsCompat.setForceDarkStrategy(webSettings,
+                    WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY);
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyDarkMode(webView.getSettings());
+    }
 }
 JAVA_EOF
 
@@ -281,17 +314,19 @@ RUN cat <<LAYOUT_EOF > app/src/main/res/layout/activity_main.xml
 LAYOUT_EOF
 
 RUN echo "<resources><string name=\"app_name\">$APP_NAME</string></resources>" > app/src/main/res/values/strings.xml
-RUN echo "<resources></resources>" > app/src/main/res/values/colors.xml
+RUN echo '<resources><color name="windowBackground">#FFFFFF</color></resources>' > app/src/main/res/values/colors.xml
 RUN cat <<'STYLES_EOF' > app/src/main/res/values/styles.xml
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/windowBackground</item>
     </style>
 </resources>
 STYLES_EOF
 RUN cat <<'DARK_STYLES_EOF' > app/src/main/res/values-night/colors.xml
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="windowBackground">#121212</color>
 </resources>
 DARK_STYLES_EOF
 
@@ -339,6 +374,7 @@ configurations.all {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.4.2'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+    implementation 'androidx.webkit:webkit:1.9.0'
 }
 APP_GRADLE_EOF
 
