@@ -63,6 +63,7 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher">
         <activity android:name=".MainActivity" android:exported="true"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -74,14 +75,6 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="http" />
-                <data android:scheme="https" />
-            </intent-filter>
-        </activity>
-        <activity android:name="androidx.browser.customtabs.CustomTabsActivity" android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
@@ -98,6 +91,9 @@ RUN cat <<MANIFEST_EOF > app/src/main/AndroidManifest.xml
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="googleusercontent" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
         </intent>
     </queries>
 </manifest>
@@ -245,6 +241,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        // App was already running when opened as the default browser for a new link.
+        android.net.Uri uri = intent.getData();
+        if (uri != null && webView != null) {
+            webView.loadUrl(uri.toString());
+        }
+    }
+
     private boolean isNightMode() {
         int nightModeFlags = getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK;
@@ -284,18 +291,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void openInCustomTab(String url) {
+        // Only delegate to a Custom Tab if a *different* app can handle it.
+        // If this app is the default browser (no separate browser installed), handing the
+        // URL back via ACTION_VIEW would just resolve to this app again and crash/loop.
+        String provider = null;
         try {
-            CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
-            // Follow the system light/dark theme instead of forcing a light toolbar.
-            builder.setColorScheme(isNightMode()
-                    ? CustomTabsIntent.COLOR_SCHEME_DARK
-                    : CustomTabsIntent.COLOR_SCHEME_LIGHT);
-            CustomTabsIntent customTabsIntent = builder.build();
-            customTabsIntent.launchUrl(this, Uri.parse(url));
-        } catch (Exception e) {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-            startActivity(intent);
+            provider = androidx.browser.customtabs.CustomTabsClient.getPackageName(this, null);
+        } catch (Exception ignored) {}
+        if (provider != null && !provider.equals(getPackageName())) {
+            try {
+                CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
+                // Follow the system light/dark theme instead of forcing a light toolbar.
+                builder.setColorScheme(isNightMode()
+                        ? CustomTabsIntent.COLOR_SCHEME_DARK
+                        : CustomTabsIntent.COLOR_SCHEME_LIGHT);
+                CustomTabsIntent customTabsIntent = builder.build();
+                customTabsIntent.launchUrl(this, Uri.parse(url));
+                return;
+            } catch (Exception e) {
+                log("Custom Tabs launch failed: " + e.getMessage());
+            }
         }
+        // No external browser available (or launch failed) -> open within this WebView.
+        webView.loadUrl(url);
     }
 
     @Override
