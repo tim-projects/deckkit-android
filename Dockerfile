@@ -368,7 +368,7 @@ android {
             if (System.getenv("KEYSTORE_PASSWORD")) {
                 signingConfigs {
                     release {
-                        storeFile file("keystore.jks")
+                        storeFile file("/project/keystore.jks")
                         storePassword System.getenv("KEYSTORE_PASSWORD")
                         keyAlias System.getenv("KEY_ALIAS")
                         keyPassword System.getenv("KEY_PASSWORD")
