@@ -65,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Avoid a white flash before the page paints: let the themed window background show through.
         webView.setBackgroundColor(Color.TRANSPARENT);
-        applyDarkMode(webSettings);
+        applyDarkModeForUrl(webSettings, urlToLoad);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -85,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
                         host.contains("ssl.gstatic.com") ||
                         host.contains("gstatic.com"))) {
                         log("Loading in WebView: " + url);
+                        applyDarkModeForUrl(webView.getSettings(), url);
                         return false;
                     } else {
                         log("Opening in Custom Tab: " + url);
@@ -150,6 +151,7 @@ public class MainActivity extends AppCompatActivity {
         // returns 400 "malformed" instead of completing sign-in.
         String data = intent.getDataString();
         if (data != null && !data.isEmpty() && webView != null) {
+            applyDarkModeForUrl(webView.getSettings(), data);
             webView.loadUrl(data);
         }
     }
@@ -160,12 +162,15 @@ public class MainActivity extends AppCompatActivity {
         return nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    private void applyDarkMode(WebSettings webSettings) {
+    private void applyDarkModeForUrl(WebSettings webSettings, String url) {
+        boolean internal = isInternalUrl(url);
         boolean night = isNightMode();
-        // Tell web pages about the system color scheme so they can render their own dark theme.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
-            WebSettingsCompat.setForceDark(webSettings,
-                    night ? WebSettingsCompat.FORCE_DARK_AUTO : WebSettingsCompat.FORCE_DARK_OFF);
+            if (internal && night) {
+                WebSettingsCompat.setForceDark(webSettings, WebSettingsCompat.FORCE_DARK_AUTO);
+            } else {
+                WebSettingsCompat.setForceDark(webSettings, WebSettingsCompat.FORCE_DARK_OFF);
+            }
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
             WebSettingsCompat.setForceDarkStrategy(webSettings,
@@ -173,11 +178,36 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isInternalUrl(String url) {
+        if (url == null) return false;
+        try {
+            Uri uri = Uri.parse(url);
+            String host = uri.getHost();
+            if (host == null) return false;
+            String baseHost = Uri.parse(BASE_URL).getHost();
+            if (host.equals(baseHost)) return true;
+            if (host.contains("auth.deckk.it") ||
+                host.contains("googleapis.com") ||
+                host.contains("google.com") ||
+                host.contains("firebaseapp.com") ||
+                host.contains("firebase.com") ||
+                host.contains("accounts.google.com") ||
+                host.contains("oauth2.googleapis.com") ||
+                host.contains("ssl.gstatic.com") ||
+                host.contains("gstatic.com")) {
+                return true;
+            }
+        } catch (Exception e) {}
+        return false;
+    }
+
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         // Re-evaluate dark mode without reloading the page when the system theme changes at runtime.
-        applyDarkMode(webView.getSettings());
+        if (webView != null) {
+            applyDarkModeForUrl(webView.getSettings(), webView.getUrl());
+        }
     }
 
     @Override
@@ -215,6 +245,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         // No external browser available (or launch failed) -> open within this WebView.
+        applyDarkModeForUrl(webView.getSettings(), url);
         webView.loadUrl(url);
     }
 
