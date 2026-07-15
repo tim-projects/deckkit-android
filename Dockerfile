@@ -27,7 +27,7 @@ WORKDIR /project
 
 RUN sudo apt-get update && sudo apt-get install -y wget imagemagick librsvg2-bin
 
-RUN if [ -f "keystore.jks" ]; then cp keystore.jks /project/keystore.jks; fi
+COPY keystore.jks /project/keystore.jks
 
 RUN PACKAGE_PATH=$(echo "$PACKAGE_NAME" | tr '.' '/') && \
     mkdir -p app/src/main/java/${PACKAGE_PATH} && \
