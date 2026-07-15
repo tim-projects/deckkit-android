@@ -234,8 +234,12 @@ public class MainActivity extends AppCompatActivity {
         });
 
         webView.restoreState(savedInstanceState);
-        android.net.Uri incomingUri = getIntent().getData();
-        String urlToLoad = incomingUri != null ? incomingUri.toString() : BASE_URL;
+        // Use getDataString() (not getData().toString()) so the exact URL is preserved,
+        // including OAuth query/fragment params. Uri.toString() re-encodes the URL and
+        // corrupts values such as the Google OAuth state/code (base64url uses +, /, =),
+        // which makes the auth handler reject the callback with 400 "malformed".
+        String incomingData = getIntent().getDataString();
+        String urlToLoad = (incomingData != null && !incomingData.isEmpty()) ? incomingData : BASE_URL;
         if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
             webView.loadUrl(urlToLoad);
         }
@@ -246,9 +250,12 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         // App was already running when opened as the default browser for a new link.
-        android.net.Uri uri = intent.getData();
-        if (uri != null && webView != null) {
-            webView.loadUrl(uri.toString());
+        // Use getDataString() to preserve the exact OAuth callback URL (query/fragment);
+        // Uri.toString() would re-encode it and corrupt state/code, so the auth handler
+        // returns 400 "malformed" instead of completing sign-in.
+        String data = intent.getDataString();
+        if (data != null && !data.isEmpty() && webView != null) {
+            webView.loadUrl(data);
         }
     }
 
