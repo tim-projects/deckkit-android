@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 chmod +x ./android-web-app-builder.sh
-touch keystore.jks 2>/dev/null || true
 ARGS=(
     --url "https://deckk.it"
     --app-name "deckk.it"

@@ -9,7 +9,7 @@ usage() {
     exit 1
 }
 
-TEMP=$(getopt -o "" -l url:,app-name:,package-name:,favicon-url:,version:,version-code: -- "$@")
+TEMP=$(getopt -o "" -l url:,app-name:,package-name:,favicon-url:,build-type:,version:,version-code: -- "$@")
 if [ $? != 0 ]; then
     usage
 fi
@@ -19,6 +19,7 @@ WEBSITE_URL=""
 APP_NAME=""
 PACKAGE_NAME=""
 FAVICON_URL=""
+BUILD_TYPE="debug"
 VERSION="0.0.1"
 VERSION_CODE="1"
 
@@ -28,6 +29,7 @@ while true; do
         --app-name) APP_NAME="$2"; shift 2 ;;
         --package-name) PACKAGE_NAME="$2"; shift 2 ;;
         --favicon-url) FAVICON_URL="$2"; shift 2 ;;
+        --build-type) BUILD_TYPE="$2"; shift 2 ;;
         --version) VERSION="$2"; shift 2 ;;
         --version-code) VERSION_CODE="$2"; shift 2 ;;
         --) shift; break ;;
@@ -54,6 +56,7 @@ echo "--- Building Android WebView App ---"
 echo "URL: $WEBSITE_URL"
 echo "App Name: $APP_NAME"
 echo "Package Name: $PACKAGE_NAME"
+echo "Build Type: $BUILD_TYPE"
 [ -n "$FAVICON_URL" ] && echo "Favicon URL: $FAVICON_URL"
 echo "Version: $VERSION ($VERSION_CODE)"
 echo "-------------------------------------"
@@ -62,15 +65,18 @@ IMAGE_NAME="webview-builder-$(date +%s)"
 APK_OUTPUT_DIR="$(pwd)/apks"
 mkdir -p "$APK_OUTPUT_DIR"
 
-# Ensure a keystore exists in the build context so COPY . picks it up for release builds.
-touch keystore.jks 2>/dev/null || true
+# Create a dummy keystore in a temp location; it only needs to exist so COPY . includes it.
+TEMP_KEYSTORE=$(mktemp)
+trap 'rm -f "$TEMP_KEYSTORE" keystore.jks' EXIT
+touch "$TEMP_KEYSTORE"
+cp "$TEMP_KEYSTORE" keystore.jks
 
 podman build \
     --build-arg WEBSITE_URL="$WEBSITE_URL" \
     --build-arg APP_NAME="$APP_NAME" \
     --build-arg PACKAGE_NAME="$PACKAGE_NAME" \
     --build-arg FAVICON_URL="$FAVICON_URL" \
-    --build-arg BUILD_TYPE=debug \
+    --build-arg BUILD_TYPE="$BUILD_TYPE" \
     --build-arg VERSION="$VERSION" \
     --build-arg VERSION_CODE="$VERSION_CODE" \
     -t "$IMAGE_NAME" \
@@ -95,5 +101,5 @@ echo ""
 echo "Success! Your Android WebView app has been created."
 echo "APK location: $FINAL_APK_PATH"
 echo ""
-echo "Note: This is a DEBUG APK, which is easier to install and test."
+echo "Note: This is a $BUILD_TYPE APK."
 echo "Build process completed."
