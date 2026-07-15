@@ -30,7 +30,12 @@ RUN sudo apt-get update && sudo apt-get install -y wget imagemagick librsvg2-bin
 # The project sources live in this repo; copy them in and build with the committed Gradle wrapper.
 COPY . /project/
 
-RUN chmod +x gradlew scripts/generate-icons.sh
+# COPY brings files in owned by root, but the cimg build user (circleci) is non-root,
+# so take ownership of /project and set the executable bits via sudo (passwordless,
+# same as the apt-get above). Without this, chmod and the icon/gradle steps fail
+# with "Operation not permitted" / "Permission denied".
+RUN sudo chown -R "$(id -u):$(id -g)" /project \
+    && sudo chmod +x gradlew scripts/generate-icons.sh
 
 # Generate the launcher icons from the favicon URL (env-provided, see build args above).
 RUN ./scripts/generate-icons.sh
