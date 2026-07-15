@@ -1,0 +1,7 @@
+.git
+.kilo
+**/build/
+.gradle/
+*.apk
+node_modules/
+apks/

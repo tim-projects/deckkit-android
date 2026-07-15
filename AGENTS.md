@@ -13,8 +13,9 @@ Key facts:
 - The workflow extracts `*.apk` from the built container, names it `<app_name>-<version>.apk`, and publishes a GitHub Release + tag `v<version>`.
 
 ### How to change app behavior
-- All app source (Java, manifest, resources, Gradle) is **generated inside the Dockerfile via heredocs**. Edit the `Dockerfile` to change the app (e.g. `MainActivity.java`, `AndroidManifest.xml`, `res/values/styles.xml`).
-- `android-web-app-builder.sh` embeds an equivalent Dockerfile for local podman builds; keep it in sync with the root `Dockerfile` when changing behavior.
+- All app source lives in normal repo files under `app/` (Java, manifest, resources, Gradle). Edit the files directly to change app behavior.
+- The root `Dockerfile` builds from the committed source (`COPY . /project/`) and runs the Gradle wrapper. It only needs editing if you change build tooling or dependencies.
+- `android-web-app-builder.sh` is a thin local/podman wrapper that invokes the root `Dockerfile`; keep its CLI flags in sync with the workflow inputs if you add new build args.
 - After pushing, trigger the workflow from the Actions tab with the desired inputs.
 
 ### Important: the app must follow system dark/light mode

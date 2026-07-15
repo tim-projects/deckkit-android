@@ -1,0 +1,62 @@
+apply plugin: 'com.android.application'
+
+def getVersionCode() {
+    def vc = System.getenv("VERSION_CODE")?.toInteger()
+    if (vc == null || vc < 1) {
+        println("WARNING: VERSION_CODE not set, using 1")
+        return 1
+    }
+    return vc
+}
+
+// Build-time inputs are passed as environment variables from the Docker build / CI.
+def appName = System.getenv("APP_NAME") ?: "deckk.it"
+def websiteUrl = System.getenv("WEBSITE_URL") ?: "https://deckk.it"
+def packageName = System.getenv("PACKAGE_NAME") ?: "com.deckk.it"
+
+android {
+    compileSdk 34
+    namespace packageName
+    defaultConfig {
+        applicationId packageName
+        minSdk 24
+        targetSdk 34
+        versionCode getVersionCode()
+        versionName System.getenv("VERSION") ?: "1.0.0"
+        // app_name is provided at build time so the launcher label matches the configured app.
+        resValue "string", "app_name", appName
+        // Expose the start URL to the app without hard-coding it in source.
+        buildConfigField "String", "BASE_URL", "\"${websiteUrl}\""
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv("KEYSTORE_PASSWORD")) {
+                signingConfigs {
+                    release {
+                        storeFile file("/project/keystore.jks")
+                        storePassword System.getenv("KEYSTORE_PASSWORD")
+                        keyAlias System.getenv("KEY_ALIAS")
+                        keyPassword System.getenv("KEY_PASSWORD")
+                    }
+                }
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            if (System.getenv("KEYSTORE_PASSWORD")) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.4.2'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+    implementation 'androidx.browser:browser:1.4.0'
+    implementation 'androidx.webkit:webkit:1.9.0'
+}
