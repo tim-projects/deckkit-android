@@ -1,11 +1,15 @@
 package com.deckk.it;
 
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.ActionMode;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
@@ -22,12 +26,15 @@ import androidx.webkit.WebViewFeature;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Locale;
+import org.json.JSONArray;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private ProgressBar progressBar;
     private static final String BASE_URL = BuildConfig.BASE_URL;
     private static final boolean DEBUG = BuildConfig.DEBUG;
+    private static final int MENU_TRANSLATE = 1001;
 
     private void log(String msg) {
         Log.d("MainActivity", msg);
@@ -65,6 +72,10 @@ public class MainActivity extends AppCompatActivity {
 
         // Avoid a white flash before the page paints: let the themed window background show through.
         webView.setBackgroundColor(Color.TRANSPARENT);
+
+        // Determine the URL to load up front so it is available before the dark-mode call below.
+        String incomingData = getIntent().getDataString();
+        String urlToLoad = (incomingData != null && !incomingData.isEmpty()) ? incomingData : BASE_URL;
         applyDarkModeForUrl(webSettings, urlToLoad);
 
         webView.setWebViewClient(new WebViewClient() {
@@ -129,13 +140,34 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        webView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
+            @Override
+            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+                return true; // keep the default Copy/Share/Select-all items
+            }
+            @Override
+            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+                menu.add(Menu.NONE, MENU_TRANSLATE, Menu.NONE, R.string.action_translate)
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+                return true;
+            }
+            @Override
+            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+                if (item.getItemId() == MENU_TRANSLATE) {
+                    translateSelection(mode);
+                    return true;
+                }
+                return false;
+            }
+            @Override
+            public void onDestroyActionMode(ActionMode mode) {}
+        });
+
         webView.restoreState(savedInstanceState);
         // Use getDataString() (not getData().toString()) so the exact URL is preserved,
         // including OAuth query/fragment params. Uri.toString() re-encodes the URL and
         // corrupts values such as the Google OAuth state/code (base64url uses +, /, =),
         // which makes the auth handler reject the callback with 400 "malformed".
-        String incomingData = getIntent().getDataString();
-        String urlToLoad = (incomingData != null && !incomingData.isEmpty()) ? incomingData : BASE_URL;
         if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
             webView.loadUrl(urlToLoad);
         }
@@ -220,6 +252,41 @@ public class MainActivity extends AppCompatActivity {
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
         webView.restoreState(savedInstanceState);
+    }
+
+    private void translateSelection(ActionMode mode) {
+        webView.evaluateJavascript("window.getSelection().toString()", raw -> {
+            // raw is a JSON-encoded string (quotes + escapes). Decode via JSONArray trick.
+            String selected = "";
+            try { selected = new JSONArray("[" + raw + "]").getString(0); } catch (Exception ignored) {}
+            if (mode != null) mode.finish();
+            launchTranslate(selected);
+        });
+    }
+
+    private void launchTranslate(String text) {
+        if (text == null) return;
+        text = text.trim();
+        if (text.isEmpty()) return;
+        String target = Locale.getDefault().getLanguage(); // device default language
+        Intent appIntent = new Intent(Intent.ACTION_SEND);
+        appIntent.setPackage("com.google.android.apps.translate");
+        appIntent.setType("text/plain");
+        appIntent.putExtra(Intent.EXTRA_TEXT, text);
+        appIntent.putExtra("key_text_input", text);
+        appIntent.putExtra("key_text_output", "");
+        appIntent.putExtra("key_language_from", "auto");   // source = auto detect
+        appIntent.putExtra("key_language_to", target);
+        try {
+            if (appIntent.resolveActivity(getPackageManager()) != null) {
+                startActivity(appIntent);
+                return;
+            }
+        } catch (Exception ignored) {}
+        // Fallback: web translate page in a Custom Tab (already dark-mode aware).
+        String url = "https://translate.google.com/translate?sl=auto&tl="
+                + target + "&text=" + Uri.encode(text);
+        openInCustomTab(url);
     }
 
     private void openInCustomTab(String url) {
