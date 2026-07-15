@@ -140,29 +140,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
-            @Override
-            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                return true; // keep the default Copy/Share/Select-all items
-            }
-            @Override
-            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                menu.add(Menu.NONE, MENU_TRANSLATE, Menu.NONE, R.string.action_translate)
-                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-                return true;
-            }
-            @Override
-            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                if (item.getItemId() == MENU_TRANSLATE) {
-                    translateSelection(mode);
-                    return true;
-                }
-                return false;
-            }
-            @Override
-            public void onDestroyActionMode(ActionMode mode) {}
-        });
-
         webView.restoreState(savedInstanceState);
         // Use getDataString() (not getData().toString()) so the exact URL is preserved,
         // including OAuth query/fragment params. Uri.toString() re-encodes the URL and
@@ -314,6 +291,21 @@ public class MainActivity extends AppCompatActivity {
         // No external browser available (or launch failed) -> open within this WebView.
         applyDarkModeForUrl(webView.getSettings(), url);
         webView.loadUrl(url);
+    }
+
+    // The WebView's text-selection contextual action bar is an Activity-level ActionMode,
+    // so we add our Translate item here as each selection CAB starts. (WebView has no
+    // setCustomSelectionActionModeCallback of its own; that method lives on TextView.)
+    @Override
+    public void onActionModeStarted(ActionMode mode) {
+        super.onActionModeStarted(mode);
+        Menu menu = mode.getMenu();
+        MenuItem translateItem = menu.add(Menu.NONE, MENU_TRANSLATE, Menu.NONE, R.string.action_translate);
+        translateItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+        translateItem.setOnMenuItemClickListener(item -> {
+            translateSelection(mode);
+            return true;
+        });
     }
 
     @Override
