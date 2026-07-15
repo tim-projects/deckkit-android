@@ -17,6 +17,10 @@ def packageName = System.getenv("PACKAGE_NAME") ?: "com.deckk.it"
 android {
     compileSdk 34
     namespace packageName
+    // Enable BuildConfig generation; this module uses BuildConfig.BASE_URL / BuildConfig.DEBUG.
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId packageName
         minSdk 24
