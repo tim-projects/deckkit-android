@@ -300,6 +300,11 @@ public class MainActivity extends AppCompatActivity {
     public void onActionModeStarted(ActionMode mode) {
         super.onActionModeStarted(mode);
         Menu menu = mode.getMenu();
+        // On API 24+ the system reuses the same Menu across selection sessions, so adding
+        // unconditionally would create a duplicate item (which then overflows/drops). Only
+        // add once, and only when there is an actual text selection (not just a cursor tap).
+        if (menu.findItem(MENU_TRANSLATE) != null) return;
+        if (mode.getTitle() != null || mode.getSubtitle() != null) return; // e.g. a text field CAB, not a selection
         MenuItem translateItem = menu.add(Menu.NONE, MENU_TRANSLATE, Menu.NONE, R.string.action_translate);
         translateItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         translateItem.setOnMenuItemClickListener(item -> {
