@@ -10,6 +10,7 @@ import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -23,6 +24,21 @@ public class BrowserActivity extends AppCompatActivity {
     private WebView webView;
     private ProgressBar progressBar;
     private static final String TAG = "BrowserActivity";
+    
+    private static final String INJECT_DARK_MODE_JS =
+        "(function() {" +
+        "  try {" +
+        "    var meta = document.querySelector('meta[name=\"color-scheme\"]');" +
+        "    if (meta) { meta.parentNode.removeChild(meta); }" +
+        "    var id = '__webview-darkmode-fix__';" +
+        "    if (!document.getElementById(id)) {" +
+        "      var style = document.createElement('style');" +
+        "      style.id = id;" +
+        "      style.textContent = 'body { background-color: #121212 !important; color: #e0e0e0 !important; } html { background-color: #121212 !important; }';" +
+        "      (document.head || document.documentElement).appendChild(style);" +
+        "    }" +
+        "  } catch(e) {}" +
+        "})();";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,8 +74,26 @@ public class BrowserActivity extends AppCompatActivity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // Inject JavaScript to override color-scheme meta tag
+                // This allows BBC's dark mode to work properly with force dark
+                view.evaluateJavascript(INJECT_DARK_MODE_JS, null);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 Log.d(TAG, "BrowserActivity loading: " + url);
+                view.evaluateJavascript(INJECT_DARK_MODE_JS, null);
+                applyDarkMode(webView.getSettings());
+                return false;
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                Log.d(TAG, "BrowserActivity loading: " + url);
+                view.evaluateJavascript(INJECT_DARK_MODE_JS, null);
                 applyDarkMode(webView.getSettings());
                 return false;
             }
@@ -118,7 +152,7 @@ public class BrowserActivity extends AppCompatActivity {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
             if (night) {
                 WebSettingsCompat.setForceDarkStrategy(webSettings,
-                        WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING);
+                        WebSettingsCompat.DARK_STRATEGY_USER_AGENT_DARKENING_ONLY);
             } else {
                 WebSettingsCompat.setForceDarkStrategy(webSettings,
                         WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY);
