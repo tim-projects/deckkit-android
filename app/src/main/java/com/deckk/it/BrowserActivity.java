@@ -105,8 +105,14 @@ public class BrowserActivity extends AppCompatActivity {
             if (night) {
                 webView.setForceDarkAllowed(true);
                 WebSettingsCompat.setForceDark(webSettings, WebSettingsCompat.FORCE_DARK_ON);
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                    WebSettingsCompat.setAlgorithmicDarkeningAllowed(webSettings, true);
+                }
             } else {
                 WebSettingsCompat.setForceDark(webSettings, WebSettingsCompat.FORCE_DARK_OFF);
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                    WebSettingsCompat.setAlgorithmicDarkeningAllowed(webSettings, false);
+                }
             }
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
