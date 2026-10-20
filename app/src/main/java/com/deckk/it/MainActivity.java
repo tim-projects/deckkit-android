@@ -35,6 +35,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String BASE_URL = BuildConfig.BASE_URL;
     private static final boolean DEBUG = BuildConfig.DEBUG;
     private static final int MENU_TRANSLATE = 1001;
+    private volatile boolean openUrlsInNewTabEnabled = true;
 
     private void log(String msg) {
         Log.d("MainActivity", msg);
@@ -98,6 +99,12 @@ public class MainActivity extends AppCompatActivity {
                         log("Loading in WebView: " + url);
                         applyDarkModeForUrl(webView.getSettings(), url);
                         return false;
+                    } else if (openUrlsInNewTabEnabled) {
+                        log("Opening in BrowserActivity: " + url);
+                        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
+                        intent.putExtra("url", url);
+                        startActivity(intent);
+                        return true;
                     } else {
                         log("Opening in Custom Tab: " + url);
                         openInCustomTab(url);
@@ -113,6 +120,13 @@ public class MainActivity extends AppCompatActivity {
                 } else if (url.startsWith("firebaseauth://") || url.startsWith("chrome://")) {
                     return false;
                 } else {
+                    if (openUrlsInNewTabEnabled) {
+                        log("Opening non-standard in BrowserActivity: " + url);
+                        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
+                        intent.putExtra("url", url);
+                        startActivity(intent);
+                        return true;
+                    }
                     openInCustomTab(url);
                     return true;
                 }
@@ -122,14 +136,29 @@ public class MainActivity extends AppCompatActivity {
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.proceed();
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                readNewWindowPreference();
+            }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
                 log("onCreateWindow called, isDialog: " + isDialog);
-                // Return false to prevent popup creation - let navigation happen in main WebView
-                // This ensures localStorage/IndexedDB is shared for Firebase Auth
+                if (openUrlsInNewTabEnabled && isUserGesture) {
+                    WebView.HitTestResult result = view.getHitTestResult();
+                    String url = result.getExtra();
+                    if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+                        log("Opening in BrowserActivity: " + url);
+                        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
+                        intent.putExtra("url", url);
+                        startActivity(intent);
+                        return true;
+                    }
+                }
                 return false;
             }
 
@@ -229,6 +258,26 @@ public class MainActivity extends AppCompatActivity {
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
         webView.restoreState(savedInstanceState);
+    }
+
+    private void readNewWindowPreference() {
+        if (webView == null) return;
+        webView.evaluateJavascript(
+            "(function() {" +
+            "  try {" +
+            "    var app = window.rssApp || window.parent.rssApp;" +
+            "    if (app && typeof app.openUrlsInNewTabEnabled !== 'undefined') {" +
+            "      return app.openUrlsInNewTabEnabled ? 'true' : 'false';" +
+            "    }" +
+            "  } catch(e) {}" +
+            "  return 'true';" +
+            "})()",
+            value -> {
+                boolean enabled = !"false".equals(value);
+                openUrlsInNewTabEnabled = enabled;
+                log("openUrlsInNewTabEnabled = " + enabled);
+            }
+        );
     }
 
     private void translateSelection(ActionMode mode) {
