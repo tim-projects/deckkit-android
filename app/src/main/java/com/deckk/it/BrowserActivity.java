@@ -103,6 +103,7 @@ public class BrowserActivity extends AppCompatActivity {
         boolean night = isNightMode();
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
             if (night) {
+                webView.setForceDarkAllowed(true);
                 WebSettingsCompat.setForceDark(webSettings, WebSettingsCompat.FORCE_DARK_ON);
             } else {
                 WebSettingsCompat.setForceDark(webSettings, WebSettingsCompat.FORCE_DARK_OFF);
@@ -111,7 +112,7 @@ public class BrowserActivity extends AppCompatActivity {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
             if (night) {
                 WebSettingsCompat.setForceDarkStrategy(webSettings,
-                        WebSettingsCompat.DARK_STRATEGY_POLARITY_INVERSION);
+                        WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING);
             } else {
                 WebSettingsCompat.setForceDarkStrategy(webSettings,
                         WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY);
