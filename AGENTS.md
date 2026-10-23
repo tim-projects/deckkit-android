@@ -17,6 +17,7 @@ Key facts:
 - The root `Dockerfile` builds from the committed source (`COPY . /project/`) and runs the Gradle wrapper. It only needs editing if you change build tooling or dependencies.
 - `android-web-app-builder.sh` is a thin local/podman wrapper that invokes the root `Dockerfile`; keep its CLI flags in sync with the workflow inputs if you add new build args.
 - After pushing, trigger the workflow from the Actions tab with the desired inputs.
+  Default to a **release** build (`build_type: release`), not debug; debug builds are only for local inspection.
 
 ### Important: the app must follow system dark/light mode
 - Theme is `Theme.AppCompat.DayNight.NoActionBar`; the window background adapts via `res/values/colors.xml` (`windowBackground`) and `res/values-night/colors.xml`.
