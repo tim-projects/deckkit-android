@@ -63,4 +63,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
     implementation 'androidx.browser:browser:1.4.0'
     implementation 'androidx.webkit:webkit:1.9.0'
+    implementation('com.github.Edsuns.AdblockAndroid:ad-filter:v0.9.1') {
+        exclude group: 'org.jetbrains.anko'
+    }
 }

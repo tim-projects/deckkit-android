@@ -36,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private static final boolean DEBUG = BuildConfig.DEBUG;
     private static final int MENU_TRANSLATE = 1001;
     private volatile boolean openUrlsInNewTabEnabled = true;
+    private AppSettings appSettings;
 
     private void log(String msg) {
         Log.d("MainActivity", msg);
@@ -55,6 +56,10 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         webView = findViewById(R.id.webview);
         progressBar = findViewById(R.id.progressBar);
+        appSettings = new AppSettings(this);
+        // App-only settings bridge: present in the app, absent in a desktop browser,
+        // so the deckk.it settings page can show these toggles only here.
+        webView.addJavascriptInterface(appSettings.new Bridge(), AppSettings.BRIDGE_NAME);
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -78,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
         String incomingData = getIntent().getDataString();
         String urlToLoad = (incomingData != null && !incomingData.isEmpty()) ? incomingData : BASE_URL;
         applyDarkModeForUrl(webSettings, urlToLoad);
+        applyZoomForUrl(urlToLoad);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -190,6 +196,7 @@ public class MainActivity extends AppCompatActivity {
         String data = intent.getDataString();
         if (data != null && !data.isEmpty() && webView != null) {
             applyDarkModeForUrl(webView.getSettings(), data);
+            applyZoomForUrl(data);
             webView.loadUrl(data);
         }
     }
@@ -245,6 +252,7 @@ public class MainActivity extends AppCompatActivity {
         // Re-evaluate dark mode without reloading the page when the system theme changes at runtime.
         if (webView != null) {
             applyDarkModeForUrl(webView.getSettings(), webView.getUrl());
+            applyZoomForUrl(webView.getUrl());
         }
     }
 
@@ -339,7 +347,21 @@ public class MainActivity extends AppCompatActivity {
         }
         // No external browser available (or launch failed) -> open within this WebView.
         applyDarkModeForUrl(webView.getSettings(), url);
+        applyZoomForUrl(url);
         webView.loadUrl(url);
+    }
+
+    /**
+     * Two-finger pinch zoom is enabled only on external websites; deckk.it keeps
+     * its own (non-scalable) layout.
+     */
+    private void applyZoomForUrl(String url) {
+        if (webView == null || appSettings == null) return;
+        boolean zoom = appSettings.isZoomEnabled() && !isInternalUrl(url);
+        WebSettings settings = webView.getSettings();
+        settings.setSupportZoom(zoom);
+        settings.setBuiltInZoomControls(zoom);
+        settings.setDisplayZoomControls(false);
     }
 
     // The WebView's text-selection contextual action bar is an Activity-level ActionMode,

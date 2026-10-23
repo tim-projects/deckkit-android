@@ -2,6 +2,7 @@ package com.deckk.it;
 
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -11,6 +12,7 @@ import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -19,12 +21,36 @@ import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewFeature;
+import io.github.edsuns.adfilter.AdFilter;
 
 public class BrowserActivity extends AppCompatActivity {
+    private static final String TAG = "BrowserActivity";
+    private static final String FILTER_LABEL = "Fanboy Ultimate List";
+    private static final String FILTER_URL = "https://fanboy.co.nz/r/fanboy-ultimate.txt";
+
     private WebView webView;
     private ProgressBar progressBar;
-    private static final String TAG = "BrowserActivity";
-    
+    private AppSettings appSettings;
+    private AdFilter adFilter;
+    private String pageHost;
+
+    // Sites that declare user-scalable=no still block pinch zoom; override their
+    // viewport meta tag so two-finger zoom works.
+    private static final String INJECT_ZOOM_JS =
+        "(function() {" +
+        "  try {" +
+        "    var content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';" +
+        "    var meta = document.querySelector('meta[name=\"viewport\"]');" +
+        "    if (meta) { meta.setAttribute('content', content); }" +
+        "    else {" +
+        "      meta = document.createElement('meta');" +
+        "      meta.name = 'viewport';" +
+        "      meta.setAttribute('content', content);" +
+        "      (document.head || document.documentElement).appendChild(meta);" +
+        "    }" +
+        "  } catch(e) {}" +
+        "})();";
+
     private static final String INJECT_DARK_MODE_JS =
         "(function() {" +
         "  try {" +
@@ -54,6 +80,7 @@ public class BrowserActivity extends AppCompatActivity {
             finish();
             return;
         }
+        appSettings = new AppSettings(this);
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -71,14 +98,30 @@ public class BrowserActivity extends AppCompatActivity {
         webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
 
         applyDarkMode(webSettings);
+        applyZoom(webSettings);
+        setupAdFilter();
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                if (adFilter != null) {
+                    try {
+                        adFilter.performScript(view, url);
+                    } catch (Throwable t) {
+                        Log.e(TAG, "performScript failed", t);
+                    }
+                }
+                view.evaluateJavascript(INJECT_ZOOM_JS, null);
+                super.onPageStarted(view, url, favicon);
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 // Inject JavaScript to override color-scheme meta tag
                 // This allows BBC's dark mode to work properly with force dark
                 view.evaluateJavascript(INJECT_DARK_MODE_JS, null);
+                view.evaluateJavascript(INJECT_ZOOM_JS, null);
             }
 
             @Override
@@ -86,6 +129,7 @@ public class BrowserActivity extends AppCompatActivity {
                 Log.d(TAG, "BrowserActivity loading: " + url);
                 view.evaluateJavascript(INJECT_DARK_MODE_JS, null);
                 applyDarkMode(webView.getSettings());
+                applyZoom(webView.getSettings());
                 return false;
             }
 
@@ -95,7 +139,34 @@ public class BrowserActivity extends AppCompatActivity {
                 Log.d(TAG, "BrowserActivity loading: " + url);
                 view.evaluateJavascript(INJECT_DARK_MODE_JS, null);
                 applyDarkMode(webView.getSettings());
+                applyZoom(webView.getSettings());
                 return false;
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (request.isForMainFrame()) {
+                    pageHost = request.getUrl().getHost();
+                }
+                if (adFilter != null && appSettings.isAdBlockEnabled()) {
+                    try {
+                        WebResourceResponse response =
+                                adFilter.shouldIntercept(view, request).getResourceResponse();
+                        if (response != null) return response;
+                    } catch (Throwable t) {
+                        Log.e(TAG, "shouldIntercept failed", t);
+                    }
+                }
+                // Optional stricter mode: drop every request that is not
+                // first-party to the site being viewed.
+                if (appSettings.isBlockThirdPartyEnabled() && !request.isForMainFrame()
+                        && pageHost != null) {
+                    String host = request.getUrl().getHost();
+                    if (host != null && !host.equals(pageHost) && !host.endsWith("." + pageHost)) {
+                        return new WebResourceResponse("text/plain", "utf-8", null);
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
             }
 
             @Override
@@ -123,7 +194,32 @@ public class BrowserActivity extends AppCompatActivity {
         String url = intent.getStringExtra("url");
         if (url != null && webView != null) {
             applyDarkMode(webView.getSettings());
+            applyZoom(webView.getSettings());
             webView.loadUrl(url);
+        }
+    }
+
+    private void applyZoom(WebSettings webSettings) {
+        boolean zoom = appSettings != null && appSettings.isZoomEnabled();
+        webSettings.setSupportZoom(zoom);
+        webSettings.setBuiltInZoomControls(zoom);
+        webSettings.setDisplayZoomControls(false);
+    }
+
+    private void setupAdFilter() {
+        if (appSettings == null || !appSettings.isAdBlockEnabled()) return;
+        try {
+            adFilter = AdFilter.Companion.get();
+            adFilter.setupWebView(webView);
+            if (!adFilter.getHasInstallation()) {
+                io.github.edsuns.adfilter.Filter filter =
+                        adFilter.getViewModel().addFilter(FILTER_LABEL, FILTER_URL);
+                adFilter.getViewModel().download(filter.getId());
+            }
+            adFilter.getViewModel().getOnDirty().observe(this, none -> webView.clearCache(false));
+        } catch (Throwable t) {
+            Log.e(TAG, "AdFilter setup failed", t);
+            adFilter = null;
         }
     }
 
