@@ -4,7 +4,7 @@ Project: deckk.it Android WebView app (single-site wrapper).
 
 ## Build is done by a GitHub worker, not locally
 
-The APK is produced by a **GitHub Actions workflow** (`.github/workflows/*.yml`, "Build APK"), triggered manually (`workflow_dispatch`). There is no local build step to run for normal changes.
+The APK is produced by a **GitHub Actions workflow** (`.github/workflows/*.yml`, "Build APK"), triggered manually (`workflow_dispatch`). There is no local build step to run for normal changes. **Do not run local builds (`./gradlew`, `android-web-app-builder.sh`, Docker) unless a human explicitly asks** — the only way to build the APK is the GitHub worker described below.
 
 Key facts:
 - The worker builds from the **root `Dockerfile`** (NOT `android-web-app-builder.sh`, which is an alternative local/podman builder with the same result).
