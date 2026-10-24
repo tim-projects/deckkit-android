@@ -21,17 +21,14 @@ import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewFeature;
-import io.github.edsuns.adfilter.AdFilter;
 
 public class BrowserActivity extends AppCompatActivity {
     private static final String TAG = "BrowserActivity";
-    private static final String FILTER_LABEL = "Fanboy Ultimate List";
-    private static final String FILTER_URL = "https://fanboy.co.nz/r/fanboy-ultimate.txt";
 
     private WebView webView;
     private ProgressBar progressBar;
     private AppSettings appSettings;
-    private AdFilter adFilter;
+    // Host of the top-level page being viewed (updated on main-frame requests).
     private String pageHost;
 
     // Sites that declare user-scalable=no still block pinch zoom; override their
@@ -99,18 +96,10 @@ public class BrowserActivity extends AppCompatActivity {
 
         applyDarkMode(webSettings);
         applyZoom(webSettings);
-        setupAdFilter();
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                if (adFilter != null) {
-                    try {
-                        adFilter.performScript(view, url);
-                    } catch (Throwable t) {
-                        Log.e(TAG, "performScript failed", t);
-                    }
-                }
                 view.evaluateJavascript(INJECT_ZOOM_JS, null);
                 super.onPageStarted(view, url, favicon);
             }
@@ -148,19 +137,10 @@ public class BrowserActivity extends AppCompatActivity {
                 if (request.isForMainFrame()) {
                     pageHost = request.getUrl().getHost();
                 }
-                if (adFilter != null && appSettings.isAdBlockEnabled()) {
-                    try {
-                        WebResourceResponse response =
-                                adFilter.shouldIntercept(view, request).getResourceResponse();
-                        if (response != null) return response;
-                    } catch (Throwable t) {
-                        Log.e(TAG, "shouldIntercept failed", t);
-                    }
-                }
-                // Optional stricter mode: drop every request that is not
-                // first-party to the site being viewed.
-                if (appSettings.isBlockThirdPartyEnabled() && !request.isForMainFrame()
-                        && pageHost != null) {
+                // "Ad Blocker" = block third-party requests on external sites.
+                // Main frames and first-party requests are always allowed.
+                if (appSettings != null && appSettings.isAdBlockEnabled()
+                        && !request.isForMainFrame() && pageHost != null) {
                     String host = request.getUrl().getHost();
                     if (host != null && !host.equals(pageHost) && !host.endsWith("." + pageHost)) {
                         return new WebResourceResponse("text/plain", "utf-8", null);
@@ -204,26 +184,6 @@ public class BrowserActivity extends AppCompatActivity {
         webSettings.setSupportZoom(zoom);
         webSettings.setBuiltInZoomControls(zoom);
         webSettings.setDisplayZoomControls(false);
-    }
-
-    private void setupAdFilter() {
-        if (appSettings == null || !appSettings.isAdBlockEnabled()) return;
-        try {
-            // Initialize the engine lazily here (Application startup must not touch
-            // the Kotlin/native engine, or a failure crashes the process before
-            // MainActivity is created). create() is idempotent (singleton).
-            adFilter = AdFilter.Companion.create(getApplicationContext());
-            adFilter.setupWebView(webView);
-            if (!adFilter.getHasInstallation()) {
-                io.github.edsuns.adfilter.Filter filter =
-                        adFilter.getViewModel().addFilter(FILTER_LABEL, FILTER_URL);
-                adFilter.getViewModel().download(filter.getId());
-            }
-            adFilter.getViewModel().getOnDirty().observe(this, none -> webView.clearCache(false));
-        } catch (Throwable t) {
-            Log.e(TAG, "AdFilter setup failed", t);
-            adFilter = null;
-        }
     }
 
     private boolean isNightMode() {

@@ -12,7 +12,6 @@ public class AppSettings {
     public static final String BRIDGE_NAME = "deckkAppSettings";
     private static final String PREFS_NAME = "app_settings";
     private static final String KEY_ADBLOCK = "adBlockEnabled";
-    private static final String KEY_BLOCK_THIRD_PARTY = "blockThirdPartyEnabled";
     private static final String KEY_ZOOM = "zoomEnabled";
 
     private final SharedPreferences prefs;
@@ -22,12 +21,9 @@ public class AppSettings {
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
+    // "Ad Blocker" blocks third-party requests on external sites.
     public boolean isAdBlockEnabled() {
         return prefs.getBoolean(KEY_ADBLOCK, true);
-    }
-
-    public boolean isBlockThirdPartyEnabled() {
-        return prefs.getBoolean(KEY_BLOCK_THIRD_PARTY, false);
     }
 
     public boolean isZoomEnabled() {
@@ -43,16 +39,6 @@ public class AppSettings {
         @JavascriptInterface
         public void setAdBlockEnabled(boolean value) {
             prefs.edit().putBoolean(KEY_ADBLOCK, value).apply();
-        }
-
-        @JavascriptInterface
-        public boolean getBlockThirdPartyEnabled() {
-            return isBlockThirdPartyEnabled();
-        }
-
-        @JavascriptInterface
-        public void setBlockThirdPartyEnabled(boolean value) {
-            prefs.edit().putBoolean(KEY_BLOCK_THIRD_PARTY, value).apply();
         }
 
         @JavascriptInterface
