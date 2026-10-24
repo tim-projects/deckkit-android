@@ -209,7 +209,10 @@ public class BrowserActivity extends AppCompatActivity {
     private void setupAdFilter() {
         if (appSettings == null || !appSettings.isAdBlockEnabled()) return;
         try {
-            adFilter = AdFilter.Companion.get();
+            // Initialize the engine lazily here (Application startup must not touch
+            // the Kotlin/native engine, or a failure crashes the process before
+            // MainActivity is created). create() is idempotent (singleton).
+            adFilter = AdFilter.Companion.create(getApplicationContext());
             adFilter.setupWebView(webView);
             if (!adFilter.getHasInstallation()) {
                 io.github.edsuns.adfilter.Filter filter =
