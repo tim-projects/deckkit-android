@@ -7,9 +7,6 @@ ARG FAVICON_URL=https://deckk.it/images/favicon.svg
 ARG BUILD_TYPE=release
 ARG VERSION=1.0.0
 ARG VERSION_CODE=1
-ARG KEYSTORE_PASSWORD
-ARG KEY_ALIAS
-ARG KEY_PASSWORD
 ARG CACHE_DATE=1
 
 ENV WEBSITE_URL=$WEBSITE_URL
@@ -19,9 +16,6 @@ ENV FAVICON_URL=$FAVICON_URL
 ENV BUILD_TYPE=$BUILD_TYPE
 ENV VERSION=$VERSION
 ENV VERSION_CODE=$VERSION_CODE
-ENV KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD
-ENV KEY_ALIAS=$KEY_ALIAS
-ENV KEY_PASSWORD=$KEY_PASSWORD
 
 WORKDIR /project
 
@@ -40,8 +34,22 @@ RUN sudo chown -R "$(id -u):$(id -g)" /project \
 # Generate the launcher icons from the favicon URL (env-provided, see build args above).
 RUN ./scripts/generate-icons.sh
 
-# Build the requested variant. For a release build the repo keystore signs the APK
-# (KEYSTORE_PASSWORD is injected via the build args above).
-RUN ./gradlew clean "assemble${BUILD_TYPE}" 2>&1 | tail -60
+# Build the requested variant. For a release build the repo keystore signs the APK.
+# Keystore credentials are passed as Docker secrets (not ARG/ENV) to avoid exposing
+# them in the image layer or triggering buildx "SecretsUsedInArgOrEnv" checks.
+# On debug builds no secrets are provided, so KEYSTORE_PASSWORD remains unset and
+# the build.gradle signing block is skipped (unsigned debug APK).
+RUN --mount=type=secret,id=keystore_password \
+    --mount=type=secret,id=key_alias \
+    --mount=type=secret,id=key_password \
+    if [ -s /run/secrets/keystore_password ]; then \
+        export KEYSTORE_PASSWORD="$(cat /run/secrets/keystore_password)" && \
+        export KEY_ALIAS="$(cat /run/secrets/key_alias)" && \
+        export KEY_PASSWORD="$(cat /run/secrets/key_password)" && \
+        echo "Keystore signing credentials loaded"; \
+    else \
+        echo "No keystore secrets provided (unsigned/debug build)"; \
+    fi && \
+    ./gradlew clean "assemble${BUILD_TYPE}" 2>&1 | tail -60
 
 CMD ["tail", "-f", "/dev/null"]
