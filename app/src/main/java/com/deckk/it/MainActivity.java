@@ -423,10 +423,7 @@ public class MainActivity extends AppCompatActivity {
                 .setNotificationVisibility(
                         DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(true)
-                .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI
-                        | DownloadManager.Request.NETWORK_MOBILE
-                        | DownloadManager.Request.NETWORK_BLUETOOTH);
+                .setAllowedOverRoaming(true);
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             request.setDestinationInExternalPublicDir(
                     Environment.DIRECTORY_DOWNLOADS, fileName);
