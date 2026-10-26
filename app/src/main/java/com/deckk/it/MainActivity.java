@@ -1,17 +1,21 @@
 package com.deckk.it;
 
+import android.app.DownloadManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -19,8 +23,10 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.net.http.SslError;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
+import androidx.core.content.ContextCompat;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewFeature;
 import java.io.File;
@@ -35,8 +41,12 @@ public class MainActivity extends AppCompatActivity {
     private static final String BASE_URL = BuildConfig.BASE_URL;
     private static final boolean DEBUG = BuildConfig.DEBUG;
     private static final int MENU_TRANSLATE = 1001;
+    private static final int REQ_WRITE_STORAGE = 2001;
     private volatile boolean openUrlsInNewTabEnabled = true;
     private AppSettings appSettings;
+    private String pendingDownloadUrl;
+    private String pendingDownloadFileName;
+    private String pendingDownloadMimeType;
 
     private void log(String msg) {
         Log.d("MainActivity", msg);
@@ -172,6 +182,14 @@ public class MainActivity extends AppCompatActivity {
             public void onProgressChanged(WebView view, int newProgress) {
                 if (newProgress == 100) progressBar.setVisibility(View.GONE);
                 else { progressBar.setVisibility(View.VISIBLE); progressBar.setProgress(newProgress); }
+            }
+        });
+
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent,
+                                        String contentDisposition, String mimeType, long contentLength) {
+                handleDownload(url, contentDisposition, mimeType);
             }
         });
 
@@ -349,6 +367,90 @@ public class MainActivity extends AppCompatActivity {
         applyDarkModeForUrl(webView.getSettings(), url);
         applyZoomForUrl(url);
         webView.loadUrl(url);
+    }
+
+    private void downloadManagerEnqueue(DownloadManager.Request request) {
+        DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        long id = dm.enqueue(request);
+        log("Download enqueued, id=" + id);
+    }
+
+    private String deriveFileName(String url, String contentDisposition) {
+        String name = null;
+        if (contentDisposition != null) {
+            String[] parts = contentDisposition.split("filename=", 2);
+            if (parts.length == 2) {
+                name = parts[1].trim().replace("\"", "");
+            }
+        }
+        if (name == null || name.isEmpty()) {
+            try {
+                name = Uri.parse(url).getLastPathSegment();
+            } catch (Exception ignored) {
+            }
+        }
+        if (name == null || name.isEmpty() || !name.endsWith(".json")) {
+            name = "backup.json";
+        }
+        return name;
+    }
+
+    private void handleDownload(String url, String contentDisposition, String mimeType) {
+        String fileName = deriveFileName(url, contentDisposition);
+        log("handleDownload: " + url + " -> " + fileName);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            doDownload(url, fileName, mimeType);
+        } else {
+            if (ContextCompat.checkSelfPermission(this,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                doDownload(url, fileName, mimeType);
+            } else {
+                pendingDownloadUrl = url;
+                pendingDownloadFileName = fileName;
+                pendingDownloadMimeType = mimeType;
+                requestPermissions(
+                        new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                        REQ_WRITE_STORAGE);
+            }
+        }
+    }
+
+    private void doDownload(String url, String fileName, String mimeType) {
+        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url))
+                .setTitle(fileName)
+                .setDescription(getString(R.string.download_description))
+                .setNotificationVisibility(
+                        DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(true)
+                .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI
+                        | DownloadManager.Request.NETWORK_MOBILE
+                        | DownloadManager.Request.NETWORK_BLUETOOTH);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            request.setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS, fileName);
+        }
+        downloadManagerEnqueue(request);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_WRITE_STORAGE
+                && grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                && pendingDownloadUrl != null) {
+            doDownload(pendingDownloadUrl, pendingDownloadFileName, pendingDownloadMimeType);
+            pendingDownloadUrl = null;
+            pendingDownloadFileName = null;
+            pendingDownloadMimeType = null;
+        } else if (requestCode == REQ_WRITE_STORAGE
+                && (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED)) {
+            Toast.makeText(this,
+                    "Storage permission required to save backups. Please enable it in Settings.",
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     /**

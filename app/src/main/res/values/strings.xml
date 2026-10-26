@@ -2,4 +2,5 @@
 <resources>
     <!-- app_name is injected at build time via resValue in app/build.gradle -->
     <string name="action_translate">Translate</string>
+    <string name="download_description">Saving your backup to the Downloads folder</string>
 </resources>
