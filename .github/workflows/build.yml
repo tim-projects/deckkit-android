@@ -119,9 +119,9 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             VERSION_CODE=${{ steps.version.outputs.version_code }}
           secrets: |
-            keystore_password,${{ secrets.KEYSTORE_PASSWORD }}
-            key_alias,${{ secrets.KEY_ALIAS }}
-            key_password,${{ secrets.KEY_PASSWORD }}
+            keystore_password=${{ secrets.KEYSTORE_PASSWORD }}
+            key_alias=${{ secrets.KEY_ALIAS }}
+            key_password=${{ secrets.KEY_PASSWORD }}
 
       - name: Build Docker image (debug)
         if: ${{ github.event.inputs.build_type == 'debug' }}
@@ -155,11 +155,18 @@ jobs:
 
       - name: Verify APK exists
         run: |
-          if [ ! -f "${{ github.event.inputs.app_name }}-${{ steps.version.outputs.version }}.apk" ]; then
+          APK="${{ github.event.inputs.app_name }}-${{ steps.version.outputs.version }}.apk"
+          if [ ! -f "$APK" ]; then
             echo "Error: APK file not found"
             exit 1
           fi
-          ls -lh ${{ github.event.inputs.app_name }}-${{ steps.version.outputs.version }}.apk
+          # An unsigned APK installs as "not a valid APK". The APK Signing Block
+          # magic means a v2/v3 signature is present; v1-only APKs have META-INF/*.SF.
+          if ! grep -qa "APK Sig Block 42" "$APK" && ! unzip -l "$APK" | grep -q "META-INF/.*\.SF"; then
+            echo "Error: APK is not signed (no APK Sig Block / no v1 signature)"
+            exit 1
+          fi
+          ls -lh "$APK"
 
       - name: Create GitHub Release
         if: ${{ github.event.inputs.build_type == 'release' }}
