@@ -35,20 +35,27 @@ RUN sudo chown -R "$(id -u):$(id -g)" /project \
 RUN ./scripts/generate-icons.sh
 
 # Build the requested variant. For a release build the repo keystore signs the APK.
-# Keystore credentials are passed as Docker secrets (not ARG/ENV) to avoid exposing
-# them in the image layer or triggering buildx "SecretsUsedInArgOrEnv" checks.
-# On debug builds no secrets are provided, so KEYSTORE_PASSWORD remains unset and
-# the build.gradle signing block is skipped (unsigned debug APK).
-RUN --mount=type=secret,id=keystore_password \
-    --mount=type=secret,id=key_alias \
-    --mount=type=secret,id=key_password \
-    if [ -s /run/secrets/keystore_password ]; then \
+# Keystore credentials are passed as Docker secrets (not ARG/ENV) so they never land
+# in an image layer and do not trigger buildx "SecretsUsedInArgOrEnv" checks.
+# mode=0444: the cimg image builds as the non-root "circleci" user, and BuildKit's
+# default mode=0400 root-owned secret files are unreadable by it.
+# required=false: debug builds (which pass no secrets) must still build.
+RUN --mount=type=secret,id=keystore_password,required=false,mode=0444 \
+    --mount=type=secret,id=key_alias,required=false,mode=0444 \
+    --mount=type=secret,id=key_password,required=false,mode=0444 \
+    if [ "$BUILD_TYPE" = "release" ]; then \
+        if [ ! -r /run/secrets/keystore_password ]; then \
+            echo "ERROR: release build needs keystore secrets (unreadable/missing)"; exit 1; \
+        fi && \
         export KEYSTORE_PASSWORD="$(cat /run/secrets/keystore_password)" && \
         export KEY_ALIAS="$(cat /run/secrets/key_alias)" && \
         export KEY_PASSWORD="$(cat /run/secrets/key_password)" && \
+        if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then \
+            echo "ERROR: keystore secrets were empty after reading"; exit 1; \
+        fi && \
         echo "Keystore signing credentials loaded"; \
     else \
-        echo "No keystore secrets provided (unsigned/debug build)"; \
+        echo "Debug build: keystore signing skipped"; \
     fi && \
     ./gradlew clean "assemble${BUILD_TYPE}" 2>&1 | tail -60
 
