@@ -88,6 +88,37 @@ public class MainActivity extends AppCompatActivity {
 
         // Avoid a white flash before the page paints: let the themed window background show through.
         webView.setBackgroundColor(Color.TRANSPARENT);
+        webView.setLongClickable(true);
+        webView.setHapticFeedbackEnabled(true);
+        webView.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                WebView.HitTestResult result = webView.getHitTestResult();
+                if (result == null) return false;
+                String url = result.getExtra();
+                int type = result.getType();
+                boolean isLink = (type == WebView.HitTestResult.SRC_ANCHOR_TYPE
+                        || type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE)
+                        && url != null && (url.startsWith("http://") || url.startsWith("https://"));
+                if (!isLink) return false;
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                    .setTitle(url)
+                    .setItems(new String[]{"Copy link", "Share link"}, (d, which) -> {
+                        if (which == 0) {
+                            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("link", url));
+                            android.widget.Toast.makeText(MainActivity.this, "Link copied", android.widget.Toast.LENGTH_SHORT).show();
+                        } else {
+                            android.content.Intent share = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                            share.setType("text/plain");
+                            share.putExtra(android.content.Intent.EXTRA_TEXT, url);
+                            startActivity(android.content.Intent.createChooser(share, "Share link"));
+                        }
+                    })
+                    .show();
+                return true;
+            }
+        });
 
         // Determine the URL to load up front so it is available before the dark-mode call below.
         String incomingData = getIntent().getDataString();

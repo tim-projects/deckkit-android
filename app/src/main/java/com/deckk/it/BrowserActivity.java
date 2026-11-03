@@ -137,12 +137,13 @@ public class BrowserActivity extends AppCompatActivity {
                 if (request.isForMainFrame()) {
                     pageHost = request.getUrl().getHost();
                 }
-                // "Ad Blocker" = block third-party requests on external sites.
+                // "Ad Blocker" = block known ad/tracking hosts only.
                 // Main frames and first-party requests are always allowed.
                 if (appSettings != null && appSettings.isAdBlockEnabled()
                         && !request.isForMainFrame() && pageHost != null) {
                     String host = request.getUrl().getHost();
-                    if (host != null && !host.equals(pageHost) && !host.endsWith("." + pageHost)) {
+                    if (host != null && !host.equals(pageHost) && !host.endsWith("." + pageHost)
+                            && isAdHost(host)) {
                         return new WebResourceResponse("text/plain", "utf-8", null);
                     }
                 }
@@ -177,6 +178,13 @@ public class BrowserActivity extends AppCompatActivity {
             applyZoom(webView.getSettings());
             webView.loadUrl(url);
         }
+    }
+
+private boolean isAdHost(String host) {
+        String h = host.toLowerCase();
+        return h.contains("doubleclick") || h.contains("googlesyndication")
+                || h.contains("googleads") || h.contains("adservice") || h.contains("adnxs")
+                || h.contains("outbrain") || h.contains("taboola") || h.contains("admob");
     }
 
     private void applyZoom(WebSettings webSettings) {
@@ -224,7 +232,38 @@ public class BrowserActivity extends AppCompatActivity {
         super.onConfigurationChanged(newConfig);
         if (webView != null) {
             applyDarkMode(webView.getSettings());
-            webView.setBackgroundColor(Color.TRANSPARENT);
+webView.setBackgroundColor(Color.TRANSPARENT);
+        webView.setLongClickable(true);
+        webView.setHapticFeedbackEnabled(true);
+        webView.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                WebView.HitTestResult result = webView.getHitTestResult();
+                if (result == null) return false;
+                String url = result.getExtra();
+                int type = result.getType();
+                boolean isLink = (type == WebView.HitTestResult.SRC_ANCHOR_TYPE
+                        || type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE)
+                        && url != null && (url.startsWith("http://") || url.startsWith("https://"));
+                if (!isLink) return false;
+                new android.app.AlertDialog.Builder(BrowserActivity.this)
+                    .setTitle(url)
+                    .setItems(new String[]{"Copy link", "Share link"}, (d, which) -> {
+                        if (which == 0) {
+                            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("link", url));
+                            android.widget.Toast.makeText(BrowserActivity.this, "Link copied", android.widget.Toast.LENGTH_SHORT).show();
+                        } else {
+                            android.content.Intent share = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                            share.setType("text/plain");
+                            share.putExtra(android.content.Intent.EXTRA_TEXT, url);
+                            startActivity(android.content.Intent.createChooser(share, "Share link"));
+                        }
+                    })
+                    .show();
+                return true;
+            }
+        });
         }
     }
 
