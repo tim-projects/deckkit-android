@@ -165,7 +165,11 @@ public class BrowserActivity extends AppCompatActivity {
         });
 
         webView.restoreState(savedInstanceState);
-        webView.loadUrl(url);
+        // Only load the requested URL when there was no state to restore; after a
+        // restore the user's own navigation history wins over the original intent URL.
+        if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
+            webView.loadUrl(url);
+        }
     }
 
     @Override
@@ -279,9 +283,6 @@ webView.setBackgroundColor(Color.TRANSPARENT);
         super.onSaveInstanceState(outState);
     }
 
-    @Override
-    protected void onRestoreInstanceState(Bundle savedInstanceState) {
-        super.onRestoreInstanceState(savedInstanceState);
-        webView.restoreState(savedInstanceState);
-    }
+    // No onRestoreInstanceState here on purpose: restoreState() runs in onCreate.
+    // Restoring twice (here and there) duplicates the back/forward history entries.
 }

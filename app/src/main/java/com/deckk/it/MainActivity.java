@@ -1,14 +1,19 @@
 package com.deckk.it;
 
 import android.app.DownloadManager;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.util.Log;
 import android.view.ActionMode;
 import android.view.Menu;
@@ -16,6 +21,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -30,10 +36,14 @@ import androidx.core.content.ContextCompat;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewFeature;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.URLDecoder;
 import java.util.Locale;
 import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
@@ -42,11 +52,62 @@ public class MainActivity extends AppCompatActivity {
     private static final boolean DEBUG = BuildConfig.DEBUG;
     private static final int MENU_TRANSLATE = 1001;
     private static final int REQ_WRITE_STORAGE = 2001;
+    private static final String BRIDGE_DOWNLOAD_NAME = "deckkAppDownload";
     private volatile boolean openUrlsInNewTabEnabled = true;
     private AppSettings appSettings;
     private String pendingDownloadUrl;
     private String pendingDownloadFileName;
     private String pendingDownloadMimeType;
+    // A download the page handed us as an inline data: URL, waiting for storage
+    // permission on API < 29 (where the public Downloads directory needs it).
+    private String pendingNativeDataUrl;
+    private String pendingNativeFileName;
+
+    /**
+     * deckk.it's backup builds its file in the browser: a Blob, an object URL and an
+     * &lt;a download&gt; that is clicked and whose object URL is revoked right afterwards.
+     * Android's DownloadManager only accepts http(s) URIs, so following the blob: URL
+     * there would throw (and crash the app). Intercept those clicks here instead, read
+     * the blob while it is still alive, and pass the bytes to the native bridge.
+     * Injected per page load; the flag keeps re-injection (SPA route change, history
+     * restore) from wrapping things twice.
+     */
+    private static final String BLOB_SHIM_JS =
+        "(function(){" +
+        "  if (window.__deckkBlobShim || typeof deckkAppDownload === 'undefined') return;" +
+        "  window.__deckkBlobShim = true;" +
+        "  var bridge = deckkAppDownload;" +
+        "  document.addEventListener('click', function(e){" +
+        "    var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;" +
+        "    if (!a) return;" +
+        "    var href = a.getAttribute('href') || '';" +
+        "    if (href.indexOf('blob:') !== 0) return;" +
+        "    var fileName = a.getAttribute('download') || 'download';" +
+        "    e.preventDefault();" +
+        "    fetch(href).then(function(r){ return r.blob(); }).then(function(b){" +
+        "      var reader = new FileReader();" +
+        "      reader.onload = function(){ bridge.saveFile(fileName, reader.result); };" +
+        "      reader.onerror = function(){ bridge.saveFailed(fileName); };" +
+        "      reader.readAsDataURL(b);" +
+        "    }).catch(function(){ bridge.saveFailed(fileName); });" +
+        "  }, true);" +
+        "})();";
+
+    /**
+     * JS bridge the page uses to hand a file it produced itself (blob/data download)
+     * to the app. Runs on a WebView thread, so it must post UI work back to the main thread.
+     */
+    private class DownloadBridge {
+        @JavascriptInterface
+        public void saveFile(String fileName, String dataUrl) {
+            handleNativeSave(fileName, dataUrl);
+        }
+
+        @JavascriptInterface
+        public void saveFailed(String fileName) {
+            reportSaveFailed(fileName);
+        }
+    }
 
     private void log(String msg) {
         Log.d("MainActivity", msg);
@@ -64,13 +125,59 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        webView = findViewById(R.id.webview);
         progressBar = findViewById(R.id.progressBar);
         appSettings = new AppSettings(this);
+
+        // The deckk.it page must outlive this activity: external links are opened on
+        // top of us in BrowserActivity, and Android is free to destroy this (stopped)
+        // activity while it stays hidden. The WebView is retained app-scoped and
+        // re-attached here, so returning to this window shows the very same loaded
+        // page instead of a re-download and a re-boot of the site.
+        webView = WebViewHolder.get();
+        boolean retained = webView != null;
+        if (!retained) {
+            webView = new WebView(this);
+            WebViewHolder.set(webView);
+        }
+        WebViewHolder.attachTo(findViewById(R.id.webview_container));
+
         // App-only settings bridge: present in the app, absent in a desktop browser,
         // so the deckk.it settings page can show these toggles only here.
+        // A retained WebView must be rebound to *this* activity instance, or its page
+        // would keep calling the old (destroyed) one's bridges; drop them first.
+        webView.removeJavascriptInterface(AppSettings.BRIDGE_NAME);
+        webView.removeJavascriptInterface(BRIDGE_DOWNLOAD_NAME);
         webView.addJavascriptInterface(appSettings.new Bridge(), AppSettings.BRIDGE_NAME);
+        webView.addJavascriptInterface(new DownloadBridge(), BRIDGE_DOWNLOAD_NAME);
 
+        // Use getDataString() (not getData().toString()) so the exact URL is preserved,
+        // including OAuth query/fragment params. Uri.toString() re-encodes the URL and
+        // corrupts values such as the Google OAuth state/code (base64url uses +, /, =),
+        // which makes the auth handler reject the callback with 400 "malformed".
+        String incomingData = getIntent().getDataString();
+        String urlToLoad = (incomingData != null && !incomingData.isEmpty()) ? incomingData : BASE_URL;
+        // restoreState() only helps after the whole app process was killed: the WebView
+        // object is gone and just the back/forward list survives, so the restored current
+        // entry re-fetches. When the WebView was retained (activity destroyed, process
+        // alive) restoring would swap the live page out for that same re-fetch — which is
+        // precisely the re-boot we are avoiding — so the state bundle is ignored.
+        if (!retained) {
+            webView.restoreState(savedInstanceState);
+        }
+
+        configureWebView(urlToLoad);
+
+        if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
+            webView.loadUrl(urlToLoad);
+        }
+    }
+
+    /**
+     * Binds settings, clients and listeners to the deckk.it WebView. Runs on every
+     * attach (first creation included) so a re-attached WebView can never call back
+     * into the previous (destroyed) activity instance.
+     */
+    private void configureWebView(String urlToLoad) {
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
@@ -120,12 +227,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Determine the URL to load up front so it is available before the dark-mode call below.
-        String incomingData = getIntent().getDataString();
-        String urlToLoad = (incomingData != null && !incomingData.isEmpty()) ? incomingData : BASE_URL;
-        applyDarkModeForUrl(webSettings, urlToLoad);
-        applyZoomForUrl(urlToLoad);
-
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
@@ -148,9 +249,7 @@ public class MainActivity extends AppCompatActivity {
                         return false;
                     } else if (openUrlsInNewTabEnabled) {
                         log("Opening in BrowserActivity: " + url);
-                        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
-                        intent.putExtra("url", url);
-                        startActivity(intent);
+                        openInBrowserActivity(url);
                         return true;
                     } else {
                         log("Opening in Custom Tab: " + url);
@@ -169,9 +268,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     if (openUrlsInNewTabEnabled) {
                         log("Opening non-standard in BrowserActivity: " + url);
-                        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
-                        intent.putExtra("url", url);
-                        startActivity(intent);
+                        openInBrowserActivity(url);
                         return true;
                     }
                     openInCustomTab(url);
@@ -185,8 +282,15 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                injectBlobDownloadShim();
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                injectBlobDownloadShim();
                 readNewWindowPreference();
             }
         });
@@ -200,9 +304,7 @@ public class MainActivity extends AppCompatActivity {
                     String url = result.getExtra();
                     if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
                         log("Opening in BrowserActivity: " + url);
-                        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
-                        intent.putExtra("url", url);
-                        startActivity(intent);
+                        openInBrowserActivity(url);
                         return true;
                     }
                 }
@@ -224,13 +326,16 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.restoreState(savedInstanceState);
-        // Use getDataString() (not getData().toString()) so the exact URL is preserved,
-        // including OAuth query/fragment params. Uri.toString() re-encodes the URL and
-        // corrupts values such as the Google OAuth state/code (base64url uses +, /, =),
-        // which makes the auth handler reject the callback with 400 "malformed".
-        if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
-            webView.loadUrl(urlToLoad);
+        // Theme and zoom follow the page that is actually showing, falling back to the
+        // URL this activity wants to load on a cold start.
+        String currentUrl = (webView.getUrl() != null && !webView.getUrl().isEmpty())
+                ? webView.getUrl() : urlToLoad;
+        applyDarkModeForUrl(webView.getSettings(), currentUrl);
+        applyZoomForUrl(currentUrl);
+        if (webView.getUrl() != null && !webView.getUrl().isEmpty()) {
+            // A re-attached page never fires onPageFinished, so sync the new-window
+            // preference now instead of waiting for the next navigation.
+            readNewWindowPreference();
         }
     }
 
@@ -244,9 +349,19 @@ public class MainActivity extends AppCompatActivity {
         // returns 400 "malformed" instead of completing sign-in.
         String data = intent.getDataString();
         if (data != null && !data.isEmpty() && webView != null) {
-            applyDarkModeForUrl(webView.getSettings(), data);
-            applyZoomForUrl(data);
-            webView.loadUrl(data);
+            if (isInternalUrl(data)) {
+                applyDarkModeForUrl(webView.getSettings(), data);
+                applyZoomForUrl(data);
+                webView.loadUrl(data);
+            } else {
+                // Never navigate the main deckk.it window away from its page: external
+                // links always land in their own (disposable) BrowserActivity.
+                if (openUrlsInNewTabEnabled) {
+                    openInBrowserActivity(data);
+                } else {
+                    openInCustomTab(data);
+                }
+            }
         }
     }
 
@@ -306,16 +421,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onDestroy() {
+        // Keep the deckk.it WebView alive while the activity is merely being destroyed
+        // (memory reclaim, unhandled configuration change) so the next MainActivity
+        // re-attaches the same loaded page; drop it only when the window is closed for good.
+        if (isFinishing()) {
+            WebViewHolder.destroy();
+        }
+        super.onDestroy();
+    }
+
+    /** Opens an external link in its own disposable window. */
+    private void openInBrowserActivity(String url) {
+        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
+        intent.putExtra("url", url);
+        startActivity(intent);
+    }
+
+    @Override
     protected void onSaveInstanceState(Bundle outState) {
         webView.saveState(outState);
         super.onSaveInstanceState(outState);
     }
 
-    @Override
-    protected void onRestoreInstanceState(Bundle savedInstanceState) {
-        super.onRestoreInstanceState(savedInstanceState);
-        webView.restoreState(savedInstanceState);
-    }
+    // No onRestoreInstanceState here on purpose: restoreState() runs in onCreate.
+    // Restoring twice (here and there) duplicates the back/forward history entries.
 
     private void readNewWindowPreference() {
         if (webView == null) return;
@@ -429,12 +559,26 @@ public class MainActivity extends AppCompatActivity {
     private void handleDownload(String url, String contentDisposition, String mimeType) {
         String fileName = deriveFileName(url, contentDisposition);
         log("handleDownload: " + url + " -> " + fileName);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            doDownload(url, fileName, mimeType);
-        } else {
-            if (ContextCompat.checkSelfPermission(this,
-                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_GRANTED) {
+        if (url == null || url.isEmpty()) return;
+        // DownloadManager.Request only accepts http(s); anything else would throw and take
+        // the app down, so every scheme that carries its bytes differently is routed here.
+        if (url.startsWith("data:")) {
+            handleNativeSave(fileName, url);
+            return;
+        }
+        if (url.startsWith("blob:")) {
+            // Normally BLOB_SHIM_JS intercepts these clicks in-page before the object URL is
+            // revoked. Landing here means the shim never ran (no bridge, page loaded in some
+            // other context); the URL is most likely dead already, but try before giving up.
+            log("blob: download reached the DownloadListener, shim missed it: " + url);
+            webView.evaluateJavascript(blobFetchJs(url, fileName), null);
+            return;
+        }
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                    || ContextCompat.checkSelfPermission(this,
+                            android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            == PackageManager.PERMISSION_GRANTED) {
                 doDownload(url, fileName, mimeType);
             } else {
                 pendingDownloadUrl = url;
@@ -444,7 +588,10 @@ public class MainActivity extends AppCompatActivity {
                         new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},
                         REQ_WRITE_STORAGE);
             }
+            return;
         }
+        log("Ignoring download with unsupported scheme: " + url);
+        reportSaveFailed(fileName);
     }
 
     private void doDownload(String url, String fileName, String mimeType) {
@@ -462,19 +609,159 @@ public class MainActivity extends AppCompatActivity {
         downloadManagerEnqueue(request);
     }
 
+    private void injectBlobDownloadShim() {
+        if (webView == null) return;
+        webView.evaluateJavascript(BLOB_SHIM_JS, null);
+    }
+
+    /** JS that reads a (possibly already revoked) blob URL and reports the result natively. */
+    private String blobFetchJs(String blobUrl, String fileName) {
+        return "(function(){var u=" + JSONObject.quote(blobUrl) + ",n=" + JSONObject.quote(fileName) + ";" +
+                "fetch(u).then(function(r){return r.blob();}).then(function(b){" +
+                "var fr=new FileReader();fr.onload=function(){deckkAppDownload.saveFile(n,fr.result);};" +
+                "fr.onerror=function(){deckkAppDownload.saveFailed(n);};fr.readAsDataURL(b);})" +
+                ".catch(function(){deckkAppDownload.saveFailed(n);});})();";
+    }
+
+    /**
+     * Saves bytes the page produced locally (data: URL from the blob shim) into the public
+     * Downloads folder. On API < 29 the public directory still needs WRITE_EXTERNAL_STORAGE.
+     */
+    private void handleNativeSave(String fileName, String dataUrl) {
+        if (dataUrl == null || !dataUrl.startsWith("data:")) {
+            reportSaveFailed(fileName);
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                && ContextCompat.checkSelfPermission(this,
+                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        != PackageManager.PERMISSION_GRANTED) {
+            // Called from the JS bridge thread, so the permission dialog must be posted.
+            runOnUiThread(() -> {
+                pendingNativeDataUrl = dataUrl;
+                pendingNativeFileName = fileName;
+                pendingDownloadUrl = null;
+                requestPermissions(
+                        new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                        REQ_WRITE_STORAGE);
+            });
+            return;
+        }
+        saveDataUrlDownload(fileName, dataUrl);
+    }
+
+    private void saveDataUrlDownload(String fileName, String dataUrl) {
+        int comma = dataUrl.indexOf(',');
+        if (comma < 0) {
+            reportSaveFailed(fileName);
+            return;
+        }
+        String header = dataUrl.substring(0, comma);   // data:<mime>[;base64]
+        String payload = dataUrl.substring(comma + 1);
+        byte[] data;
+        try {
+            if (header.contains(";base64")) {
+                data = Base64.decode(payload, Base64.DEFAULT);
+            } else {
+                data = URLDecoder.decode(payload, "UTF-8").getBytes("UTF-8");
+            }
+        } catch (Exception e) {
+            log("Could not decode downloaded data URL: " + e);
+            reportSaveFailed(fileName);
+            return;
+        }
+        String mimeType = "application/octet-stream";
+        int colon = header.indexOf(':');
+        int end = header.indexOf(';');
+        if (colon >= 0) {
+            mimeType = header.substring(colon + 1, end < 0 ? header.length() : end).trim();
+        }
+        if (mimeType.isEmpty()) mimeType = "application/octet-stream";
+        saveBytesToDownloads(fileName, mimeType, data);
+    }
+
+    private void saveBytesToDownloads(String fileName, String mimeType, byte[] data) {
+        String name = sanitizeFileName(fileName);
+        Uri target = null;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
+                values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                values.put(MediaStore.Downloads.IS_PENDING, 1);
+                target = getContentResolver().insert(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (target == null) throw new IOException("MediaStore insert returned null");
+                try (OutputStream out = getContentResolver().openOutputStream(target)) {
+                    if (out == null) throw new IOException("openOutputStream returned null");
+                    out.write(data);
+                }
+                values.clear();
+                values.put(MediaStore.Downloads.IS_PENDING, 0);
+                getContentResolver().update(target, values, null, null);
+            } else {
+                File dir = Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS);
+                File file = new File(dir, name);
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    out.write(data);
+                }
+                // Legacy files are not indexed automatically, so the Downloads app would
+                // not see the backup until a reboot.
+                MediaScannerConnection.scanFile(this, new String[]{file.getAbsolutePath()},
+                        new String[]{mimeType}, null);
+            }
+            log("Saved download: " + name);
+            reportSaved(name);
+        } catch (Exception e) {
+            log("Saving download failed: " + e);
+            if (target != null) getContentResolver().delete(target, null, null);
+            reportSaveFailed(name);
+        }
+    }
+
+    private String sanitizeFileName(String name) {
+        if (name == null || name.trim().isEmpty()) return "download.bin";
+        String sanitized = name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+        if (sanitized.length() > 120) {
+            sanitized = sanitized.substring(sanitized.length() - 120);
+        }
+        return sanitized;
+    }
+
+    private void reportSaved(String fileName) {
+        runOnUiThread(() -> Toast.makeText(this,
+                getString(R.string.download_saved, fileName), Toast.LENGTH_LONG).show());
+    }
+
+    private void reportSaveFailed(String fileName) {
+        runOnUiThread(() -> Toast.makeText(this,
+                getString(R.string.download_failed, fileName), Toast.LENGTH_LONG).show());
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_WRITE_STORAGE
                 && grantResults.length > 0
-                && grantResults[0] == PackageManager.PERMISSION_GRANTED
-                && pendingDownloadUrl != null) {
-            doDownload(pendingDownloadUrl, pendingDownloadFileName, pendingDownloadMimeType);
-            pendingDownloadUrl = null;
-            pendingDownloadFileName = null;
-            pendingDownloadMimeType = null;
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (pendingDownloadUrl != null) {
+                doDownload(pendingDownloadUrl, pendingDownloadFileName, pendingDownloadMimeType);
+                pendingDownloadUrl = null;
+                pendingDownloadFileName = null;
+                pendingDownloadMimeType = null;
+            } else if (pendingNativeDataUrl != null) {
+                String name = pendingNativeFileName;
+                String dataUrl = pendingNativeDataUrl;
+                pendingNativeFileName = null;
+                pendingNativeDataUrl = null;
+                saveDataUrlDownload(name, dataUrl);
+            }
         } else if (requestCode == REQ_WRITE_STORAGE
                 && (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED)) {
+            pendingNativeDataUrl = null;
+            pendingNativeFileName = null;
             Toast.makeText(this,
                     "Storage permission required to save backups. Please enable it in Settings.",
                     Toast.LENGTH_LONG).show();
