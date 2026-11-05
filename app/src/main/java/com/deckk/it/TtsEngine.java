@@ -444,10 +444,6 @@ final class TtsEngine {
     }
 
     private static String jsArg(String value) {
-        try {
-            return JSONObject.quote(value == null ? "" : value);
-        } catch (JSONException e) {
-            return "\"\"";
-        }
+        return JSONObject.quote(value == null ? "" : value);
     }
 }
