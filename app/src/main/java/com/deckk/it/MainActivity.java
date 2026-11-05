@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String BRIDGE_DOWNLOAD_NAME = "deckkAppDownload";
     private volatile boolean openUrlsInNewTabEnabled = true;
     private AppSettings appSettings;
+    private TtsEngine ttsEngine;
     private String pendingDownloadUrl;
     private String pendingDownloadFileName;
     private String pendingDownloadMimeType;
@@ -145,10 +146,16 @@ public class MainActivity extends AppCompatActivity {
         // so the deckk.it settings page can show these toggles only here.
         // A retained WebView must be rebound to *this* activity instance, or its page
         // would keep calling the old (destroyed) one's bridges; drop them first.
+        // Android WebView has no window.speechSynthesis, so the engine behind this
+        // bridge is the only way deckk.it's reader can speak. See TtsEngine.
+        ttsEngine = TtsEngine.get(this);
+        ttsEngine.attach(webView);
         webView.removeJavascriptInterface(AppSettings.BRIDGE_NAME);
         webView.removeJavascriptInterface(BRIDGE_DOWNLOAD_NAME);
+        webView.removeJavascriptInterface(TtsEngine.BRIDGE_NAME);
         webView.addJavascriptInterface(appSettings.new Bridge(), AppSettings.BRIDGE_NAME);
         webView.addJavascriptInterface(new DownloadBridge(), BRIDGE_DOWNLOAD_NAME);
+        webView.addJavascriptInterface(ttsEngine, TtsEngine.BRIDGE_NAME);
 
         // Use getDataString() (not getData().toString()) so the exact URL is preserved,
         // including OAuth query/fragment params. Uri.toString() re-encodes the URL and
@@ -285,12 +292,14 @@ public class MainActivity extends AppCompatActivity {
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 injectBlobDownloadShim();
+                injectTtsShim();
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 injectBlobDownloadShim();
+                injectTtsShim();
                 readNewWindowPreference();
             }
         });
@@ -427,6 +436,9 @@ public class MainActivity extends AppCompatActivity {
         // re-attaches the same loaded page; drop it only when the window is closed for good.
         if (isFinishing()) {
             WebViewHolder.destroy();
+            // The window is closing for good, so there is no page left to speak
+            // into; any other destruction keeps the engine alive with the WebView.
+            TtsEngine.release();
         }
         super.onDestroy();
     }
@@ -612,6 +624,15 @@ public class MainActivity extends AppCompatActivity {
     private void injectBlobDownloadShim() {
         if (webView == null) return;
         webView.evaluateJavascript(BLOB_SHIM_JS, null);
+    }
+
+    /**
+     * Puts window.speechSynthesis on the page, backed by the native TTS engine.
+     * Harmless where the bridge is missing (a desktop browser keeps the real API).
+     */
+    private void injectTtsShim() {
+        if (webView == null) return;
+        TtsSpeechShim.inject(webView, this);
     }
 
     /** JS that reads a (possibly already revoked) blob URL and reports the result natively. */
